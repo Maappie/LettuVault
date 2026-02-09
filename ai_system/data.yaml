@@ -1,0 +1,10 @@
+path: ./datasets        # Root directory of your data
+train: train/images     # Relative path to training images
+val: valid/images       # Relative path to validation images
+test: test/images       # Optional: for final testing
+
+names:
+  0: lettuce
+  1: wilting
+  2: worms
+  3: strawberry

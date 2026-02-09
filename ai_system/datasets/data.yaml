@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['lettuce - v1 2024-11-18 9-25pm']
+
+roboflow:
+  workspace: verduras2-z9h2o
+  project: lettuce-iuvjr
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/verduras2-z9h2o/lettuce-iuvjr/dataset/1

@@ -1,0 +1,4 @@
+datasets/test/
+datasets/train/
+datasets/valid/
+venv
