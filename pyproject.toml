@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lettuvault-workspace"
+version = "0.1.0"
+
+# 1. This tells Python WHICH packages to include
+[tool.setuptools]
+packages = ["lettu_vault_ai", "lettu_backend"]
+
+# 2. This tells Python WHERE those packages live
+[tool.setuptools.package-dir]
+"lettu_vault_ai" = "ai_system/src/lettu_vault_ai"
+"lettu_backend" = "backend/src/lettu_backend"

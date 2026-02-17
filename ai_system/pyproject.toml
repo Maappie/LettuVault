@@ -5,7 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lettu_vault_ai"
 version = "0.1.0"
-dependencies = ["ultralytics", "opencv-python", "torch", "numpy"]
+description = "AI Worker for LettuVault: YOLOv8 detection and Hybrid Zoom logic."
+dependencies = [
+    "ultralytics==8.4.13",
+    "opencv-python==4.13.0.92",
+    "torch==2.10.0",
+    "torchvision==0.25.0",
+    "numpy==2.2.6",
+    "PyYAML==6.0.3"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
