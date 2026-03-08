@@ -1,37 +1,37 @@
-
----
-
-## 📂 Updated LettuVault Structure
+## 📂 Current LettuVault Structure
 
 ```text
 LettuVault/                     <-- Root Folder (The Workspace)
-├── .venv/                      <-- Python Virtual Environment (Keep this active!)
-├── pyproject.toml              <-- Root Workspace Config (Maps all packages)
-├── requirements.txt            <-- Master List (Contains all libraries + "-e .")
-├── .gitignore                  <-- Ignores .venv, __pycache__, and .egg-info
+├── .venv/                      <-- Python Virtual Environment
+├── pyproject.toml              <-- Root Workspace Config (Maps packages)
+├── requirements.txt            <-- Master Dependencies List
+├── .gitignore                  <-- Git ignore rules
+├── start.py                    <-- Dev bootstrapper (Runs FastAPI + Path mapping)
 │
 ├── ai_system/                  <-- AI Worker (Package: lettu_vault_ai)
-│   ├── pyproject.toml          <-- AI Package Config (Lists torch, ultralytics, etc.)
-│   ├── yolov8n.pt              <-- Your YOLO model weights
-│   ├── datasets/               <-- Training/Validation images
+│   ├── pyproject.toml          <-- AI Package Config (Torch, Ultralytics, etc.)
+│   ├── yolov8n.pt              <-- Pre-trained YOLOv8 weights
+│   ├── train_thesis.py         <-- Training script for Lettuce/Strawberries
+│   ├── datasets/               <-- Contains data.yaml and images
 │   └── src/
-│       └── lettu_vault_ai/     <-- Core AI Code Folder
+│       └── lettu_vault_ai/
 │           ├── __init__.py
-│           ├── detector.py     <-- Hybrid Zoom & Detection Logic
-│           └── main.py         <-- MQTT Listener (AI Service Entry)
+│           └── test_detector.py <-- Initial detection logic/dummy scans
 │
 ├── backend/                    <-- Web Server (Package: lettu_backend)
-│   ├── pyproject.toml          <-- Backend Package Config (Lists fastapi, uvicorn)
+│   ├── pyproject.toml          <-- Backend Package Config (FastAPI, Uvicorn)
 │   └── src/
-│       └── lettu_backend/      <-- Core Backend Code Folder
+│       └── lettu_backend/
 │           ├── __init__.py
-│           ├── main.py         <-- FastAPI Endpoints & App Initialization
-│           ├── test_link.py    <-- Script to verify cross-package connection
-│           └── db_manager.py   <-- SQLite/Database Logic
+│           ├── main.py         <-- FastAPI entry point
+│           ├── test_link.py    <-- Verifies AI <-> Backend connection
+│           ├── api/            <-- API Route handlers (v1)
+│           ├── models/         <-- Database (database.py) & Domain models
+│           ├── services/       <-- Logic for AI and MQTT integrations
+│           └── repository/     <-- Database CRUD operations
 │
-├── embedded/                   <-- C++/Arduino: ESP32 Source Code
-└── mobile/                     <-- Flutter: Mobile App Source Code
-
+├── embedded/                   <-- ESP32 Source Code (Work in progress)
+└── mobile/                     <-- Flutter Source Code (Work in progress)
 ```
 
 ---
