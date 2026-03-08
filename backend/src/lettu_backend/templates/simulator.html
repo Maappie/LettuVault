@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LettuVault | Device Simulator</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #4ade80;
+        --secondary: #60a5fa;
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f8fafc;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Outfit", sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        background: var(--card);
+        padding: 2.5rem;
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        width: 100%;
+        max-width: 450px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 2rem;
+        background: #0f172a;
+        padding: 5px;
+        border-radius: 12px;
+      }
+      .tab-btn {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #94a3b8;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+      .tab-btn.active {
+        background: var(--card);
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+
+      h1 {
+        margin: 0 0 0.5rem 0;
+        font-size: 28px;
+        font-weight: 600;
+        color: white;
+      }
+      p {
+        margin: 0 0 1.5rem 0;
+        color: #94a3b8;
+        font-size: 15px;
+      }
+      .field {
+        margin-bottom: 1.25rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 13px;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      input {
+        width: 100%;
+        padding: 12px 16px;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        color: white;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+
+      button.primary {
+        width: 100%;
+        padding: 14px;
+        background: var(--primary);
+        border: none;
+        border-radius: 12px;
+        color: #064e3b;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        transition:
+          transform 0.1s,
+          opacity 0.2s;
+        margin-top: 10px;
+      }
+      button.secondary {
+        width: 100%;
+        padding: 14px;
+        background: var(--secondary);
+        border: none;
+        border-radius: 12px;
+        color: #1e3a8a;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        transition:
+          transform 0.1s,
+          opacity 0.2s;
+        margin-top: 10px;
+      }
+      button:active {
+        transform: scale(0.98);
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+
+      #response {
+        margin-top: 25px;
+        padding: 15px;
+        background: #020617;
+        border-radius: 12px;
+        border: 1px solid #1e293b;
+        font-family: monospace;
+        font-size: 12px;
+        color: #4ade80;
+        overflow-x: auto;
+        display: none;
+        max-height: 250px;
+      }
+      .status-msg {
+        color: #4ade80;
+        font-size: 12px;
+        margin-bottom: 10px;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>{{ project_name }}</h1>
+      <p>Unified Hardware & API Testing Hub</p>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('publish')">
+          PUBLISH DATA
+        </button>
+        <button class="tab-btn" onclick="switchTab('fetch')">FETCH DATA</button>
+      </div>
+
+      <!-- Tab 1: Publish -->
+      <div id="publish-content" class="tab-content active">
+        <div id="publish-status" class="status-msg">
+          ✅ Record successfully saved!
+        </div>
+        <div class="field">
+          <label>Worm Count</label>
+          <input type="number" id="worm_count" value="5" />
+        </div>
+        <div class="field">
+          <label>Confidence Score (0.0 - 1.0)</label>
+          <input type="number" step="0.01" id="confidence_score" value="0.94" />
+        </div>
+        <div class="field">
+          <label>Temperature (€C)</label>
+          <input type="number" step="0.1" id="temperature" value="22.5" />
+        </div>
+        <div class="field">
+          <label>Humidity (%)</label>
+          <input type="number" step="0.1" id="humidity" value="65.0" />
+        </div>
+        <div class="field">
+          <label>Scan Note / Name</label>
+          <input
+            type="text"
+            id="name"
+            placeholder="E.g. Batch #42 Morning Check"
+          />
+        </div>
+        <button class="primary" onclick="sendData()">PUBLISH TO VAULT</button>
+      </div>
+
+      <!-- Tab 2: Fetch -->
+      <div id="fetch-content" class="tab-content">
+        <div id="fetch-status" class="status-msg">✅ Record retrieved!</div>
+        <div class="field">
+          <label>Fetch Mode</label>
+          <select
+            id="fetch_mode"
+            onchange="toggleFetchId()"
+            style="
+              width: 100%;
+              padding: 12px;
+              background: #0f172a;
+              border: 1px solid #334155;
+              border-radius: 12px;
+              color: white;
+              margin-bottom: 1rem;
+            "
+          >
+            <option value="all">Get All Scans</option>
+            <option value="single">Get Specific Scan by ID</option>
+          </select>
+        </div>
+        <div id="scan_id_field" class="field" style="display: none">
+          <label>Scan ID</label>
+          <input type="number" id="scan_id" placeholder="Enter Numeric ID" />
+        </div>
+        <button class="secondary" onclick="fetchData()">
+          FETCH FROM VAULT
+        </button>
+      </div>
+
+      <hr style="border: 1px solid #1e293b; margin: 20px 0" />
+      <div class="field">
+        <label style="color: #fbbf24">🔐 Hardware API Key</label>
+        <input
+          type="password"
+          id="api_key"
+          placeholder="Enter X-API-KEY"
+          value="{{ x_api_key }}"
+        />
+      </div>
+
+      <pre id="response"></pre>
+    </div>
+
+    <script>
+      function switchTab(tab) {
+        document
+          .querySelectorAll(".tab-btn")
+          .forEach((btn) => btn.classList.remove("active"));
+        document
+          .querySelectorAll(".tab-content")
+          .forEach((content) => content.classList.remove("active"));
+
+        if (tab === "publish") {
+          document
+            .querySelector(".tab-btn:nth-child(1)")
+            .classList.add("active");
+          document.getElementById("publish-content").classList.add("active");
+        } else {
+          document
+            .querySelector(".tab-btn:nth-child(2)")
+            .classList.add("active");
+          document.getElementById("fetch-content").classList.add("active");
+        }
+        document.getElementById("response").style.display = "none";
+      }
+
+      function toggleFetchId() {
+        const mode = document.getElementById("fetch_mode").value;
+        document.getElementById("scan_id_field").style.display =
+          mode === "single" ? "block" : "none";
+      }
+
+      async function sendData() {
+        const data = {
+          worm_count: parseInt(document.getElementById("worm_count").value),
+          confidence_score: parseFloat(
+            document.getElementById("confidence_score").value,
+          ),
+          image_name: "simulated_capture.jpg",
+          temperature: parseFloat(document.getElementById("temperature").value),
+          humidity: parseFloat(document.getElementById("humidity").value),
+          name: document.getElementById("name").value,
+        };
+
+        await performRequest("/api/v1/scans", "POST", data, "publish-status");
+      }
+
+      async function fetchData() {
+        const mode = document.getElementById("fetch_mode").value;
+        let url = "/api/v1/scans";
+        if (mode === "single") {
+          const id = document.getElementById("scan_id").value;
+          if (!id) {
+            alert("Please enter a Scan ID");
+            return;
+          }
+          url += `/${id}`;
+        }
+
+        await performRequest(url, "GET", null, "fetch-status");
+      }
+
+      async function performRequest(url, method, body, statusId) {
+        const resBox = document.getElementById("response");
+        const status = document.getElementById(statusId);
+        const req_api_key = document.getElementById("api_key").value;
+
+        resBox.style.display = "block";
+        resBox.innerText = "Processing...";
+        resBox.style.color = "#94a3b8";
+
+        try {
+          const options = {
+            method: method,
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-KEY": req_api_key,
+            },
+          };
+          if (body) options.body = JSON.stringify(body);
+
+          const response = await fetch(url, options);
+          const result = await response.json();
+
+          resBox.innerText = JSON.stringify(result, null, 2);
+
+          if (response.ok) {
+            status.style.display = "block";
+            setTimeout(() => (status.style.display = "none"), 3000);
+            resBox.style.color = "#4ade80";
+          } else {
+            resBox.style.color = "#ef4444";
+          }
+        } catch (err) {
+          resBox.innerText = "Error: " + err.message;
+          resBox.style.color = "#ef4444";
+        }
+      }
+    </script>
+  </body>
+</html>

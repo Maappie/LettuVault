@@ -1,0 +1,5 @@
+[console_scripts]
+db-history = lettu_backend.main:run_history
+db-migrate = lettu_backend.main:run_migration
+db-status = lettu_backend.main:run_status
+db-upgrade = lettu_backend.main:run_upgrade

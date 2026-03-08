@@ -10,7 +10,17 @@ version = "0.1.0"
 [tool.setuptools]
 packages = ["lettu_vault_ai", "lettu_backend"]
 
+# 3. Bundle non-Python files (templates, etc.) inside each package
+[tool.setuptools.package-data]
+"lettu_backend" = ["templates/*.html"]
+
 # 2. This tells Python WHERE those packages live
 [tool.setuptools.package-dir]
 "lettu_vault_ai" = "ai_system/src/lettu_vault_ai"
 "lettu_backend" = "backend/src/lettu_backend"
+
+[project.scripts]
+db-migrate = "lettu_backend.main:run_migration"
+db-upgrade = "lettu_backend.main:run_upgrade"
+db-history = "lettu_backend.main:run_history"
+db-status = "lettu_backend.main:run_status"
