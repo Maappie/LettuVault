@@ -1,5 +1,5 @@
-datasets/test/
-datasets/train/
+datasets/images/
+datasets/labels/
 datasets/valid/
 venv
 src/lettu_vault_ai/__pycache__

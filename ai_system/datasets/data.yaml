@@ -1,13 +1,9 @@
-train: ../train/images
-val: ../valid/images
-test: ../test/images
+path: C:\Users\Raiz\LettuVault\ai_system\datasets
+train: images/train
+val: images/train
 
-nc: 1
-names: ['lettuce - v1 2024-11-18 9-25pm']
-
-roboflow:
-  workspace: verduras2-z9h2o
-  project: lettuce-iuvjr
-  version: 1
-  license: CC BY 4.0
-  url: https://universe.roboflow.com/verduras2-z9h2o/lettuce-iuvjr/dataset/1
+names:
+  0: lettuce
+  1: wilting
+  2: worms
+  3: strawberry

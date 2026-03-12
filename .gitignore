@@ -1,2 +1,6 @@
-/.venv
-test-folder
+.venv/
+__pycache__/
+
+
+
+
