@@ -27,7 +27,7 @@ def main():
         data=yaml_path,                
         epochs=1,                    
         imgsz=640,                     
-        device='cpu',                  
+        device='0',                  
         project=save_dir,              # 🎯 Forces results into ai_system/runs
         name='lettuce_strawberry_v1',  
         batch=8,                       

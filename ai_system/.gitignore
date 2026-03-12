@@ -4,3 +4,8 @@ datasets/valid/
 venv
 src/lettu_vault_ai/__pycache__
 src/lettu_vault_ai.egg-info
+
+runs/lettuce_strawberry_v1/labels.jpg
+runs/lettuce_strawberry_v1/train_batch0.jpg
+runs/lettuce_strawberry_v1/train_batch1.jpg
+runs/lettuce_strawberry_v1/train_batch2.jpg
