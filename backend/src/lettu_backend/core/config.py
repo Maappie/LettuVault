@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Prioritizes .env, falls back to the local /data folder
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///data/lettu_vault.db")
 
+    # 📡 MQTT Settings
+    MQTT_BROKER: str = os.getenv("MQTT_BROKER", "127.0.0.1")
+    MQTT_PORT: int = int(os.getenv("MQTT_PORT", "1883"))
+    MQTT_TOPIC_SENSORS: str = os.getenv("MQTT_TOPIC_SENSORS", "lettuvault/sensors")
+    MQTT_TOPIC_AI: str = os.getenv("MQTT_TOPIC_AI", "lettuvault/ai")
+
     class Config:
         case_sensitive = True
 

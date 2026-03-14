@@ -1,12 +1,12 @@
-# 🛠️ LettuVault Script Toolbox
+# LettuVault Script Toolbox
 
-This document lists the custom command-line "shortcuts" created to make development easier for you and your team. These commands are shortcuts to complex `alembic` and `python` tasks.
+This document lists all custom command-line shortcuts for development.
 
 ---
 
-## 🚦 Prerequisites
+## Prerequisites
 
-To use these commands, you MUST have your virtual environment active:
+Virtual environment MUST be active:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -14,35 +14,79 @@ To use these commands, you MUST have your virtual environment active:
 
 ---
 
-## 💾 Database Commands (Alembic)
+## System Commands
 
-Use these when you want to change your database structure (schema).
-
-| Command                    | Action                | When to use?                               |
-| :------------------------- | :-------------------- | :----------------------------------------- |
-| **`db-migrate "message"`** | Records a change      | After you edit `database.py`.              |
-| **`db-upgrade`**           | Pushes the change     | To apply the changes to your `.db` file.   |
-| **`db-history`**           | Shows your timeline   | To see all past changes (like `git log`).  |
-| **`db-status`**            | Shows current version | To check if you are on the latest version. |
+| Command | What it does |
+|---|---|
+| `lettu_vault_start` | Starts ALL services: Broker, Backend, MQTT, AI — in a live TUI |
 
 ---
 
-## 🚀 System Bootstrapping
+## Database Commands (Alembic)
 
-| Command               | Action            | Description                                |
-| :-------------------- | :---------------- | :----------------------------------------- |
-| **`python start.py`** | Starts everything | Boots up the FastAPI backend and AI paths. |
+Use these when you change `database.py`:
 
----
-
-## 📖 Where are these defined?
-
-- **Mapping**: The command names are mapped in the root **`pyproject.toml`** under `[project.scripts]`.
-- **Logic**: The actual Python code that runs these commands is located at the bottom of **`backend/src/lettu_backend/main.py`**.
+| Command | Action | When |
+|---|---|---|
+| `db-migrate "message"` | Creates a migration file | After editing `database.py` |
+| `db-upgrade` | Applies migrations to DB | After generating |
+| `db-history` | Shows all past changes | For auditing |
+| `db-status` | Shows current DB version | Troubleshooting |
 
 ---
 
-## 💡 Troubleshooting
+## Database Utilities
 
-- **"Command not found"**: If your terminal doesn't recognize `db-upgrade`, run `pip install -e .` once more while your `.venv` is active. This "refreshes" the shortcut links.
-- **Database Errors**: Make sure you are in the root folder when running these scripts so they can find the `backend/` directory correctly.
+```powershell
+python verify_data.py    # Count records in each table
+python clear_db.py       # Wipe ALL data (keeps structure)
+```
+
+---
+
+## Individual Services (Advanced)
+
+Run a single service manually for debugging:
+
+```powershell
+# Backend only
+python -m uvicorn lettu_backend.main:app --host 0.0.0.0 --port 8000
+
+# Local MQTT Broker only
+python -m lettu_backend.services.broker_service
+
+# MQTT Subscriber only
+python -m lettu_backend.services.mqtt_service
+
+# AI Camera only
+python -m lettu_vault_ai.predict
+```
+
+---
+
+## Where are these defined?
+
+- **Script names**: Root `pyproject.toml` under `[project.scripts]`
+- **`lettu_vault_start` logic**: `backend/src/lettu_backend/services/log_hub.py`
+- **DB commands**: Bottom of `backend/src/lettu_backend/main.py`
+
+---
+
+## AI Sensitivity (Confidence Threshold)
+
+Edit this line in `ai_system/src/lettu_vault_ai/predict.py`:
+
+```python
+CONFIDENCE_THRESHOLD = 0.2  # 0.0 = detect everything, 1.0 = very strict
+```
+
+## MQTT Settings
+
+Edit `MQTT_*` values in `.env`:
+
+```bash
+MQTT_BROKER="127.0.0.1"          # Local broker (change for production)
+MQTT_PORT=1883
+MQTT_TOPIC_SENSORS="lettuvault/sensors"
+MQTT_TOPIC_AI="lettuvault/ai"
+```

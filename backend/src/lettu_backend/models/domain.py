@@ -3,20 +3,33 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
-class ScanRecordBase(BaseModel):
+# --- AI DETECTION SCHEMAS ---
+class AIScanBase(BaseModel):
     worm_count: int
     confidence_score: float
     image_name: str
-    temperature: Optional[float] = None
-    humidity: Optional[float] = None
-    name: Optional[str] = None
+    label: Optional[str] = "Primary Camera"
 
-class ScanRecordCreate(ScanRecordBase):
+class AIScanCreate(AIScanBase):
     pass
 
-class ScanRecordResponse(ScanRecordBase):
+class AIScanResponse(AIScanBase):
     id: int
     timestamp: datetime
+    class Config:
+        from_attributes = True
 
+# --- SENSOR DATA SCHEMAS ---
+class SensorReadingBase(BaseModel):
+    temperature: float
+    humidity: float
+    device_id: Optional[str] = "LettuVault-Hardware"
+
+class SensorReadingCreate(SensorReadingBase):
+    pass
+
+class SensorReadingResponse(SensorReadingBase):
+    id: int
+    timestamp: datetime
     class Config:
         from_attributes = True

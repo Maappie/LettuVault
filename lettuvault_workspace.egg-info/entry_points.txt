@@ -3,3 +3,4 @@ db-history = lettu_backend.main:run_history
 db-migrate = lettu_backend.main:run_migration
 db-status = lettu_backend.main:run_status
 db-upgrade = lettu_backend.main:run_upgrade
+lettu_vault_start = lettu_backend.main:run_system
