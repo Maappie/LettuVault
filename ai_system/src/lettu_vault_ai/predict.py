@@ -2,6 +2,7 @@ import os
 import cv2
 import json
 import time
+import base64
 import paho.mqtt.client as mqtt
 from ultralytics import YOLO
 from lettu_backend.core.config import settings
@@ -39,19 +40,29 @@ if not connect_mqtt():
 # =====================================================
 #  Send Detection Results
 # =====================================================
-def send_results_to_backend(summary, confidence, image_name="camera_feed.jpg"):
-    """Publishes detection data to the MQTT broker."""
+def send_results_to_backend(summary, confidence, frame, image_name="camera_feed.jpg"):
+    """Captures a snapshot and publishes detection data + image to the MQTT broker."""
     summary_str = ", ".join([f"{v} {k}" for k, v in summary.items() if v > 0])
+    
+    # Encode current frame as base64 JPEG for transport
+    image_b64 = None
+    try:
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_b64 = base64.b64encode(buffer).decode('utf-8')
+    except Exception as e:
+        print(f"⚠️ [AI] Could not encode snapshot: {e}")
+
     payload = {
         "api_key": settings.X_API_KEY,
         "worm_count": summary.get("worms", 0),
         "confidence_score": float(confidence),
         "image_name": image_name,
+        "image_b64": image_b64,   # base64 encoded snapshot
         "label": summary_str if summary_str else "No Detections"
     }
     try:
         mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
-        print(f"📤 [PUBLISHER] Detection Results: {summary_str}")
+        print(f"📤 [PUBLISHER] Detection Results: {summary_str} | 📸 Snapshot included")
     except Exception as e:
         print(f"❌ [AI] MQTT Publish Error: {e}")
 
@@ -159,8 +170,8 @@ def run_live_camera():
                     last_timer_log_time = current_time
 
                 if duration >= stability_threshold and not data_sent_for_current_event:
-                    print(f"[AI] Stability Reached: {total_ms}/{total_ms}ms. Sending data!")
-                    send_results_to_backend(detection_summary, max_conf)
+                    print(f"[AI] Stability Reached: {total_ms}/{total_ms}ms. Capturing snapshot & sending!")
+                    send_results_to_backend(detection_summary, max_conf, annotated_frame)
                     data_sent_for_current_event = True
         else:
             if detection_start_time is not None:

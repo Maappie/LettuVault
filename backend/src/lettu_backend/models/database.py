@@ -27,7 +27,8 @@ class AIScan(Base):
     worm_count = Column(Integer)
     confidence_score = Column(Float)
     image_name = Column(String)  
-    label = Column(String) # E.g. "Primary Camera"
+    image = Column(String, nullable=True)  # Relative path: captures/scan_xyz.jpg
+    label = Column(String)
 
 class SensorReading(Base):
     __tablename__ = "sensor_readings"

@@ -2,7 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import pathlib
+import os
 
 from lettu_backend.core.config import settings
 from lettu_backend.api.v1.endpoints import router as api_v1_router
@@ -21,6 +23,11 @@ app = FastAPI(
 
 # 🚀 Mount Versioned API Router
 app.include_router(api_v1_router, prefix="/api/v1")
+
+# 📸 Serve AI snapshot images from data/captures/
+CAPTURES_DIR = os.path.join("data", "captures")
+os.makedirs(CAPTURES_DIR, exist_ok=True)
+app.mount("/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 
 @app.on_event("startup")
 def startup_event():
@@ -44,7 +51,7 @@ async def data_dashboard(request: Request):
     return templates.TemplateResponse(
         request=request, 
         name="dashboard.html", 
-        context={"project_name": settings.PROJECT_NAME}
+        context={"project_name": settings.PROJECT_NAME, "x_api_key": settings.X_API_KEY}
     )
 
 @app.get("/simulator", response_class=HTMLResponse, tags=["UI"])
