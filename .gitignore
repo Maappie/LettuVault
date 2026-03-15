@@ -1,57 +1,57 @@
-# Python
+# ==========================================
+# ROOT .gitignore — LettuVault Monorepo
+# ==========================================
+
+# ---- Python ----
 **/__pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.egg-info/
+*.egg
+.installed.cfg
+.pytest_cache/
 .Python
-# build/  <-- Removed to prevent ignoring Flutter build/lib
-# lib/    <-- Removed to prevent ignoring Flutter build/lib
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-# lib64/
 parts/
 sdist/
 var/
 wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
 
-# Virtual Environments
+# ---- Virtual Environments ----
 .venv/
 venv/
 ENV/
 
-# Environment Variables
+# ---- Environment / Secrets ----
 .env
 .env.*
 !.env.example
 
-# Database
+# ---- Database ----
 data/*
 !data/.gitkeep
 *.db
 *.sqlite
 *.bak
 
-# PlatformIO
+# ---- PlatformIO (Embedded/ESP32) ----
 .pio/
 .pioenvs/
 .piolibdeps/
 *.orig
 
-# VS Code
-.vscode/
-!.vscode/extensions.json
-!.vscode/launch.json
-!.vscode/settings.json
-!.vscode/tasks.json
+# ---- VS Code (project-level) ----
+.vscode/c_cpp_properties.json
+.vscode/ipch/
 
-# Local / Temporary
-data/logs/
+# ---- AI Model Runs (large binary/log output) ----
+ai_system/runs/
+
+# ---- Temporary & Logs ----
 *.log
 tmp/
