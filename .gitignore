@@ -1,8 +1,57 @@
-.venv/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# Environment Variables
 .env
-data/lettu_vault.db
+.env.*
+!.env.example
+
+# Database
+data/*
+!data/.gitkeep
+*.db
+*.sqlite
+*.bak
 
 # PlatformIO
-.pio
-.vscode/ipch/
+.pio/
+.pioenvs/
+.piolibdeps/
+*.orig
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Local / Temporary
+data/logs/
+*.log
+tmp/
