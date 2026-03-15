@@ -20,21 +20,44 @@ class MQTTService:
         if rc == 0:
             client.subscribe(settings.MQTT_TOPIC_SENSORS)
             client.subscribe(settings.MQTT_TOPIC_AI)
-            logger.info(f"[MQTT] Subscribed to Sensors: {settings.MQTT_TOPIC_SENSORS}")
-            logger.info(f"[MQTT] Subscribed to AI: {settings.MQTT_TOPIC_AI}")
+            logger.info(f"🔗 [SUBSCRIBER] Connected to Broker")
+            logger.info(f"📥 [SUBSCRIBER] Listening on: {settings.MQTT_TOPIC_SENSORS}")
+            logger.info(f"📥 [SUBSCRIBER] Listening on: {settings.MQTT_TOPIC_AI}")
 
     def on_message(self, client, userdata, msg):
         try:
             data = json.loads(msg.payload.decode())
+            
+            # --- SECURITY CHECK ---
+            payload_key = data.get("api_key")
+            if payload_key != settings.X_API_KEY:
+                logger.warning(f"⚠️ Unauthorized MQTT message on {msg.topic}. Invalid API Key.")
+                return
+
             db = SessionLocal()
             try:
                 repo = DataRepository(db)
+                # Cleanup payload before saving to DB if necessary
+                clean_data = {k: v for k, v in data.items() if k != "api_key"}
+                
                 if msg.topic == settings.MQTT_TOPIC_AI:
-                    repo.create_ai_scan(data)
-                    logger.info("AI data saved via MQTT.")
+                    repo.create_ai_scan(clean_data)
+                    logger.info("🧠 [SUBSCRIBER] Saved AI scan to Database")
                 elif msg.topic == settings.MQTT_TOPIC_SENSORS:
-                    repo.create_sensor_reading(data)
-                    logger.info("Sensor data saved via MQTT.")
+                    # Save to standard sensors table
+                    repo.create_sensor_reading({k: v for k, v in clean_data.items() if k != "pressure"})
+                    
+                    # If pressure is present, also update system_config
+                    if "pressure" in clean_data:
+                        config_data = {
+                            "temperature": clean_data.get("temperature"),
+                            "humidity": clean_data.get("humidity"),
+                            "pressure": clean_data.get("pressure")
+                        }
+                        repo.create_system_config(config_data)
+                        logger.info("📉 [SUBSCRIBER] Saved System Config (Temp/Hum/Pres) to Database")
+                    
+                    logger.info("📟 [SUBSCRIBER] Saved Sensor reading to Database")
             finally:
                 db.close()
         except Exception as e:
@@ -42,18 +65,22 @@ class MQTTService:
 
     def start(self):
         import time
-        retries = 5
-        while retries > 0:
+        logger.info(f"[MQTT] Attempting to connect to {self.broker}:{self.port}")
+        while True:
             try:
                 self.client.connect(self.broker, self.port, 60)
                 self.client.loop_start()
-                logger.info(f"[MQTT] Connected to {self.broker}")
+                logger.info(f"[MQTT] Successfully connected to {self.broker}")
                 return
             except Exception as e:
-                retries -= 1
-                logger.warning(f"[MQTT] Broker not ready, retrying in 2s... ({retries} left)")
-                time.sleep(2)
-        logger.error("[MQTT] Connection failed after multiple attempts.")
+                logger.warning(f"[MQTT] Connection failed ({e}), retrying in 5s...")
+                time.sleep(5)
+
+    def send_command(self, message: str):
+        """Send a message to the ESP32 control topic."""
+        topic = "lettuvault/control"
+        self.client.publish(topic, message)
+        logger.info(f"📤 [PUBLISHER] Sent command: '{message}' to {topic}")
 
 mqtt_service = MQTTService()
 

@@ -22,18 +22,16 @@ MQTT_TOPIC  = settings.MQTT_TOPIC_AI
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 def connect_mqtt():
-    retries = 5
-    while retries > 0:
+    print(f"[AI] Attempting to connect to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
+    while True:
         try:
             mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
             mqtt_client.loop_start()
-            print(f"[AI] Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
+            print(f"[AI] Successfully connected to MQTT broker")
             return True
-        except Exception:
-            retries -= 1
-            print(f"[AI] Waiting for broker... ({retries} retries left)")
-            time.sleep(2)
-    return False
+        except Exception as e:
+            print(f"[AI] Connection failed ({e}), retrying in 5s...")
+            time.sleep(5)
 
 if not connect_mqtt():
     print("[AI] Could not connect to MQTT Broker. Is it running?")
@@ -45,6 +43,7 @@ def send_results_to_backend(summary, confidence, image_name="camera_feed.jpg"):
     """Publishes detection data to the MQTT broker."""
     summary_str = ", ".join([f"{v} {k}" for k, v in summary.items() if v > 0])
     payload = {
+        "api_key": settings.X_API_KEY,
         "worm_count": summary.get("worms", 0),
         "confidence_score": float(confidence),
         "image_name": image_name,
@@ -52,9 +51,9 @@ def send_results_to_backend(summary, confidence, image_name="camera_feed.jpg"):
     }
     try:
         mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
-        print(f"[AI] Published: {summary_str}")
+        print(f"📤 [PUBLISHER] Detection Results: {summary_str}")
     except Exception as e:
-        print(f"[AI] MQTT Publish Error: {e}")
+        print(f"❌ [AI] MQTT Publish Error: {e}")
 
 # =====================================================
 #  Main Camera Loop
@@ -119,7 +118,8 @@ def run_live_camera():
             source=frame,
             conf=ai_cfg.CONFIDENCE_THRESHOLD,
             show=False,
-            stream=True
+            stream=True,
+            verbose=False
         )
 
         detection_summary = detection_template.copy()

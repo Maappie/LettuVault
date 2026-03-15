@@ -33,3 +33,18 @@ class SensorReadingResponse(SensorReadingBase):
     timestamp: datetime
     class Config:
         from_attributes = True
+
+# --- SYSTEM CONFIG SCHEMAS ---
+class SystemConfigBase(BaseModel):
+    temperature: float
+    humidity: float
+    pressure: float
+
+class SystemConfigCreate(SystemConfigBase):
+    pass
+
+class SystemConfigResponse(SystemConfigBase):
+    id: int
+    timestamp: datetime
+    class Config:
+        from_attributes = True
