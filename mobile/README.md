@@ -1,1 +1,1 @@
-This is the README.md for mobile/ flutter
+Mine lang gagalaw dine (Meyvn)
