@@ -1,6 +1,57 @@
+# ==========================================
+# ROOT .gitignore — LettuVault Monorepo
+# ==========================================
+
+# ---- Python ----
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.installed.cfg
+.pytest_cache/
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+
+# ---- Virtual Environments ----
 .venv/
-__pycache__/
+venv/
+ENV/
 
+# ---- Environment / Secrets ----
+.env
+.env.*
+!.env.example
 
+# ---- Database ----
+data/*
+!data/.gitkeep
+*.db
+*.sqlite
+*.bak
 
+# ---- PlatformIO (Embedded/ESP32) ----
+.pio/
+.pioenvs/
+.piolibdeps/
+*.orig
 
+# ---- VS Code (project-level) ----
+.vscode/c_cpp_properties.json
+.vscode/ipch/
+
+# ---- AI Model Runs (large binary/log output) ----
+ai_system/runs/
+
+# ---- Temporary & Logs ----
+*.log
+tmp/

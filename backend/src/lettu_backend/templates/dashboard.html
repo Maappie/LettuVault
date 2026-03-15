@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LettuVault | Intelligence Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4ade80;
+            --secondary: #60a5fa;
+            --accent: #fbbf24;
+            --danger: #f87171;
+            --cyan: #22d3ee;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            margin: 0; padding: 2rem;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .header { width: 100%; max-width: 1400px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            width: 100%;
+            max-width: 1400px;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--card); border-radius: 20px; border: 1px solid var(--border);
+            padding: 1.5rem; display: flex; flex-direction: column; gap: 4px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .stat-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 1px; }
+        .stat-value { font-size: 2rem; font-weight: 600; }
+        .stat-sub { font-size: 0.8rem; color: var(--text-dim); }
+
+        .dashboard-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 2rem; 
+            width: 100%; 
+            max-width: 1400px; 
+        }
+
+        /* Full-width panel for system config */
+        .panel-full {
+            grid-column: 1 / -1;
+        }
+
+        .panel { 
+            background: var(--card); border-radius: 24px; border: 1px solid var(--border); 
+            overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column;
+        }
+
+        .panel-header { 
+            padding: 1.25rem 1.5rem; 
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .category-title { font-weight: 600; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
+        
+        .panel-content { height: 300px; overflow-y: auto; }
+        .panel-content-slim { height: 220px; overflow-y: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { 
+            position: sticky; top: 0; background: var(--card); z-index: 10;
+            padding: 0.75rem 1.5rem; text-align: left; color: var(--text-dim); 
+            border-bottom: 2px solid var(--border); text-transform: uppercase; font-size: 0.65rem; 
+        }
+        td { padding: 0.85rem 1.5rem; border-bottom: 1px solid var(--border); }
+        
+        .timestamp { font-family: monospace; color: var(--text-dim); font-size: 0.75rem; }
+        
+        /* Specific Colors for Categories */
+        .color-worms { color: var(--danger); }
+        .color-lettuce { color: var(--primary); }
+        .color-strawberry { color: #f472b6; }
+        .color-wilting { color: var(--accent); }
+        .color-env { color: var(--cyan); }
+
+        .badge { 
+            padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; 
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Sensor value pills */
+        .pill-temp { background: rgba(251,191,36,0.1); color: var(--accent); padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .pill-hum  { background: rgba(96,165,250,0.1); color: var(--secondary); padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .pill-pres { background: rgba(34,211,238,0.1); color: var(--cyan); padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+
+        .live-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+            animation: pulse 2s infinite; display: inline-block; margin-right: 6px;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .refresh-btn { 
+            background: var(--card); color: var(--text); border: 1px solid var(--border); 
+            padding: 0.6rem 1.2rem; border-radius: 12px; cursor: pointer; font-weight: 600;
+            transition: all 0.2s;
+        }
+        .refresh-btn:hover { background: var(--border); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        /* --- View Button in table --- */
+        .view-btn-inline {
+            padding: 3px 10px; border-radius: 8px;
+            background: rgba(96,165,250,0.1); color: var(--secondary);
+            border: 1px solid rgba(96,165,250,0.3); cursor: pointer;
+            font-weight: 600; font-size: 0.72rem; font-family: 'Outfit', sans-serif;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .view-btn-inline:hover { background: rgba(96,165,250,0.25); }
+        .view-btn-inline:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        /* --- Lightbox Overlay --- */
+        .lightbox {
+            display: none; position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+            align-items: center; justify-content: center; flex-direction: column;
+            gap: 1rem;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 90vw; max-height: 80vh; border-radius: 16px;
+            border: 2px solid var(--border); box-shadow: 0 20px 80px rgba(0,0,0,0.8);
+        }
+        .lightbox-meta { color: var(--text); font-size: 0.9rem; text-align: center; }
+        .lightbox-close {
+            position: absolute; top: 1.5rem; right: 2rem;
+            background: none; border: none; color: var(--text); font-size: 2rem;
+            cursor: pointer; opacity: 0.7; transition: opacity 0.2s;
+        }
+        .lightbox-close:hover { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 style="margin:0;">LettuVault <span style="font-weight: 300; opacity: 0.7;">Intelligence Dashboard</span></h1>
+            <p style="color: var(--text-dim); margin-top: 5px;"><span class="live-dot"></span>Live monitoring for AI detections and environment sensors</p>
+        </div>
+        <button class="refresh-btn" onclick="loadAllData()">🔄 Refresh All</button>
+    </div>
+
+    <!-- LIVE STATS ROW -->
+    <div class="stat-row">
+        <div class="stat-card">
+            <div class="stat-label">🌡️ Temperature</div>
+            <div class="stat-value" id="stat-temp" style="color: var(--accent);">--°C</div>
+            <div class="stat-sub">Latest BME280 reading</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">💧 Humidity</div>
+            <div class="stat-value" id="stat-hum" style="color: var(--secondary);">--%</div>
+            <div class="stat-sub">Relative humidity</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">📊 Pressure</div>
+            <div class="stat-value" id="stat-pres" style="color: var(--cyan);">-- hPa</div>
+            <div class="stat-sub">Atmospheric pressure</div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+
+        <!-- SYSTEM CONFIG (ENVIRONMENT) TABLE - Full Width -->
+        <div class="panel panel-full">
+            <div class="panel-header">
+                <div class="category-title color-env">🌿 Environment Readings (System Config — BME280)</div>
+            </div>
+            <div class="panel-content-slim">
+                <table>
+                    <thead><tr><th>Time</th><th>Temperature</th><th>Humidity</th><th>Pressure</th></tr></thead>
+                    <tbody id="sysconfig-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- WORMS DASHBOARD -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="category-title color-worms">🪱 Worms Detection</div>
+            </div>
+            <div class="panel-content">
+                <table>
+                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
+                    <tbody id="worms-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- WILTING DASHBOARD -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="category-title color-wilting">🍂 Wilting Analysis</div>
+            </div>
+            <div class="panel-content">
+                <table>
+                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
+                    <tbody id="wilting-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- STRAWBERRY DASHBOARD -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="category-title color-strawberry">🍓 Strawberry Monitor</div>
+            </div>
+            <div class="panel-content">
+                <table>
+                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
+                    <tbody id="strawberry-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LETTUCE DASHBOARD -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="category-title color-lettuce">🥬 Lettuce Growth</div>
+            </div>
+            <div class="panel-content">
+                <table>
+                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
+                    <tbody id="lettuce-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- LIGHTBOX MODAL -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+        <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+        <img id="lightbox-img" src="" alt="Detection Snapshot">
+        <div class="lightbox-meta" id="lightbox-meta"></div>
+    </div>
+
+    <script>
+        const API_KEY = '{{ x_api_key if x_api_key else "" }}';
+
+        async function loadAllData() {
+            await loadAIScans();
+            await loadSystemConfig();
+        }
+
+        async function loadAIScans() {
+            try {
+                const res = await fetch('/api/v1/ai-scans', { headers: { 'X-API-KEY': API_KEY } });
+                const scans = await res.json();
+                
+                ['worms', 'wilting', 'strawberry', 'lettuce'].forEach(id => {
+                    document.getElementById(id + '-body').innerHTML = '';
+                });
+
+                scans.forEach(scan => {
+                    const labelLower = (scan.label || "").toLowerCase();
+                    if (labelLower.includes('worms')) addAIRow('worms', scan, 'worms');
+                    if (labelLower.includes('wilting')) addAIRow('wilting', scan, 'wilting');
+                    if (labelLower.includes('strawberry')) addAIRow('strawberry', scan, 'strawberry');
+                    if (labelLower.includes('lettuce')) addAIRow('lettuce', scan, 'lettuce');
+                });
+            } catch (e) { console.error("AI fetch error:", e); }
+        }
+
+        async function loadSystemConfig() {
+            try {
+                const res = await fetch('/api/v1/system_config', { headers: { 'X-API-KEY': API_KEY } });
+                const configs = await res.json();
+                
+                const body = document.getElementById('sysconfig-body');
+                body.innerHTML = '';
+
+                if (configs.length > 0) {
+                    const latest = configs[0];
+                    document.getElementById('stat-temp').textContent = latest.temperature.toFixed(1) + '°C';
+                    document.getElementById('stat-hum').textContent = latest.humidity.toFixed(1) + '%';
+                    document.getElementById('stat-pres').textContent = latest.pressure.toFixed(1) + ' hPa';
+                }
+
+                configs.forEach(cfg => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="timestamp">${new Date(cfg.timestamp).toLocaleString()}</td>
+                        <td><span class="pill-temp">🌡️ ${cfg.temperature.toFixed(2)}°C</span></td>
+                        <td><span class="pill-hum">💧 ${cfg.humidity.toFixed(2)}%</span></td>
+                        <td><span class="pill-pres">📊 ${cfg.pressure.toFixed(2)} hPa</span></td>
+                    `;
+                    body.appendChild(tr);
+                });
+            } catch (e) { console.error("System config fetch error:", e); }
+        }
+
+        function addAIRow(tableId, s, keyword) {
+            const body = document.getElementById(tableId + '-body');
+            const tr = document.createElement('tr');
+            
+            let specificCount = "Detected";
+            const parts = (s.label || '').split(',');
+            parts.forEach(p => {
+                if (p.toLowerCase().includes(keyword)) {
+                    specificCount = p.trim().split(' ')[0] + " " + keyword.charAt(0).toUpperCase() + keyword.slice(1);
+                }
+            });
+
+            const hasImage = s.image && s.image.trim() !== '';
+            let viewBtn;
+            if (hasImage) {
+                viewBtn = document.createElement('button');
+                viewBtn.className = 'view-btn-inline';
+                viewBtn.textContent = '\u{1F441}\uFE0F View';
+                viewBtn.dataset.img  = '/' + s.image;
+                viewBtn.dataset.label = s.label || '';
+                viewBtn.dataset.time = new Date(s.timestamp).toLocaleString();
+                viewBtn.dataset.conf = Math.round(s.confidence_score * 100) + '%';
+                viewBtn.addEventListener('click', function() {
+                    openLightbox(this.dataset.img, this.dataset.label, this.dataset.time, this.dataset.conf);
+                });
+            } else {
+                viewBtn = document.createElement('button');
+                viewBtn.className = 'view-btn-inline';
+                viewBtn.textContent = '\u2014';
+                viewBtn.disabled = true;
+                viewBtn.title = 'No snapshot';
+            }
+
+            tr.innerHTML = `
+                <td class="timestamp">${new Date(s.timestamp).toLocaleString()}</td>
+                <td><span class="badge">${specificCount}</span></td>
+                <td>${Math.round(s.confidence_score * 100)}%</td>
+                <td style="color: var(--text-dim); font-size: 10px;">${s.label}</td>
+                <td></td>
+            `;
+            tr.lastElementChild.appendChild(viewBtn);
+            body.appendChild(tr);
+        }
+
+        function openLightbox(src, label, time, conf) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox-meta').innerHTML = `<strong>${label}</strong> &nbsp;|&nbsp; ${time} &nbsp;|&nbsp; Confidence: ${conf}`;
+            document.getElementById('lightbox').classList.add('open');
+        }
+
+        function closeLightbox(e) {
+            if (!e || e.target !== document.getElementById('lightbox-img')) {
+                document.getElementById('lightbox').classList.remove('open');
+            }
+        }
+
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeLightbox(); });
+
+        setInterval(loadAllData, 5000);
+        loadAllData();
+
+    </script>
+</body>
+</html>

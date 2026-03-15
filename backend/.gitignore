@@ -1,2 +1,12 @@
-src/lettu_backend.egg-info
+**/__pycache__/
+*.py[cod]
+*.egg-info/
 src/lettu_backend/__pycache__
+src/lettu_backend/core/__pycache__
+src/lettu_backend/models/__pycache__
+src/lettu_backend/services/__pycache__
+src/lettu_backend/repository/__pycache__
+src/lettu_backend/api/__pycache__
+src/lettu_backend/api/v1/__pycache__
+migrations/__pycache__
+migrations/versions/__pycache__

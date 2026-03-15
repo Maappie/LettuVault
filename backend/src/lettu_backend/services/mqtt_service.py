@@ -1,0 +1,123 @@
+# backend/src/lettu_backend/services/mqtt_service.py
+import paho.mqtt.client as mqtt
+import json
+import logging
+import base64
+import os
+import datetime
+from lettu_backend.core.config import settings
+from lettu_backend.models.database import SessionLocal
+from lettu_backend.repository.scan_repo import DataRepository
+
+logger = logging.getLogger("MQTT_SERVICE")
+
+# Folder where AI snapshots are stored (relative to project root)
+CAPTURES_DIR = os.path.join("data", "captures")
+os.makedirs(CAPTURES_DIR, exist_ok=True)
+
+class MQTTService:
+    def __init__(self):
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+        self.broker = settings.MQTT_BROKER
+        self.port = settings.MQTT_PORT
+
+    def on_connect(self, client, userdata, flags, rc, properties):
+        if rc == 0:
+            client.subscribe(settings.MQTT_TOPIC_SENSORS)
+            client.subscribe(settings.MQTT_TOPIC_AI)
+            logger.info(f"🔗 [SUBSCRIBER] Connected to Broker")
+            logger.info(f"📥 [SUBSCRIBER] Listening on: {settings.MQTT_TOPIC_SENSORS}")
+            logger.info(f"📥 [SUBSCRIBER] Listening on: {settings.MQTT_TOPIC_AI}")
+
+    def on_message(self, client, userdata, msg):
+        try:
+            data = json.loads(msg.payload.decode())
+            
+            # --- SECURITY CHECK ---
+            payload_key = data.get("api_key")
+            if payload_key != settings.X_API_KEY:
+                logger.warning(f"⚠️ Unauthorized MQTT message on {msg.topic}. Invalid API Key.")
+                return
+
+            db = SessionLocal()
+            try:
+                repo = DataRepository(db)
+                # Cleanup payload before saving to DB if necessary
+                clean_data = {k: v for k, v in data.items() if k != "api_key"}
+                
+                if msg.topic == settings.MQTT_TOPIC_AI:
+                    # Decode and save image snapshot if present
+                    image_rel_path = None
+                    image_b64 = clean_data.pop("image_b64", None)
+                    if image_b64:
+                        try:
+                            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                            filename = f"scan_{ts}.jpg"
+                            filepath = os.path.join(CAPTURES_DIR, filename)
+                            with open(filepath, "wb") as f:
+                                f.write(base64.b64decode(image_b64))
+                            image_rel_path = f"captures/{filename}"
+                            logger.info(f"📸 [SUBSCRIBER] Snapshot saved: {image_rel_path}")
+                        except Exception as img_err:
+                            logger.warning(f"⚠️ [SUBSCRIBER] Could not save snapshot: {img_err}")
+
+                    clean_data["image"] = image_rel_path
+                    repo.create_ai_scan(clean_data)
+                    logger.info("🧠 [SUBSCRIBER] Saved AI scan to Database")
+                elif msg.topic == settings.MQTT_TOPIC_SENSORS:
+                    # Save to standard sensors table
+                    repo.create_sensor_reading({k: v for k, v in clean_data.items() if k != "pressure"})
+                    
+                    # If pressure is present, also update system_config
+                    if "pressure" in clean_data:
+                        config_data = {
+                            "temperature": clean_data.get("temperature"),
+                            "humidity": clean_data.get("humidity"),
+                            "pressure": clean_data.get("pressure")
+                        }
+                        repo.create_system_config(config_data)
+                        logger.info("📉 [SUBSCRIBER] Saved System Config (Temp/Hum/Pres) to Database")
+                    
+                    logger.info("📟 [SUBSCRIBER] Saved Sensor reading to Database")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"❌ MQTT Processing Error: {e}")
+
+    def start(self):
+        import time
+        logger.info(f"[MQTT] Attempting to connect to {self.broker}:{self.port}")
+        while True:
+            try:
+                self.client.connect(self.broker, self.port, 60)
+                self.client.loop_start()
+                logger.info(f"[MQTT] Successfully connected to {self.broker}")
+                return
+            except Exception as e:
+                logger.warning(f"[MQTT] Connection failed ({e}), retrying in 5s...")
+                time.sleep(5)
+
+    def send_command(self, message: str):
+        """Send a message to the ESP32 control topic."""
+        topic = "lettuvault/control"
+        self.client.publish(topic, message)
+        logger.info(f"📤 [PUBLISHER] Sent command: '{message}' to {topic}")
+
+mqtt_service = MQTTService()
+
+def run_standalone():
+    """Entry point for running MQTT service in its own terminal."""
+    import time
+    logging.basicConfig(level=logging.INFO)
+    logger.info("[MQTT] Connecting to Broker...")
+    mqtt_service.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("[MQTT] Stopping...")
+
+if __name__ == "__main__":
+    run_standalone()

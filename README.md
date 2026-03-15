@@ -1,104 +1,122 @@
-## 📂 Current LettuVault Structure
+# LettuVault — Project Root
+
+## 📂 Current Structure
 
 ```text
 LettuVault/                     <-- Root Folder (The Workspace)
 ├── .venv/                      <-- Python Virtual Environment
 ├── pyproject.toml              <-- Root Workspace Config (Maps packages)
 ├── requirements.txt            <-- Master Dependencies List
+├── .env                        <-- Secret config (NEVER commit to Git!)
 ├── .gitignore                  <-- Git ignore rules
-├── start.py                    <-- Dev bootstrapper (Runs FastAPI + Path mapping)
 │
 ├── ai_system/                  <-- AI Worker (Package: lettu_vault_ai)
-│   ├── pyproject.toml          <-- AI Package Config (Torch, Ultralytics, etc.)
-│   ├── yolov8n.pt              <-- Pre-trained YOLOv8 weights
-│   ├── train_thesis.py         <-- Training script for Lettuce/Strawberries
-│   ├── datasets/               <-- Contains data.yaml and images
-│   └── src/
-│       └── lettu_vault_ai/
-│           ├── __init__.py
-│           └── test_detector.py <-- Initial detection logic/dummy scans
+│   ├── pyproject.toml
+│   ├── runs/lettuce_strawberry_v12/weights/best.pt  <-- Trained YOLO Model
+│   ├── datasets/               <-- data.yaml and training images
+│   └── src/lettu_vault_ai/
+│       ├── predict.py          <-- MAIN: Camera + YOLO + MQTT Publisher
+│       └── __init__.py
 │
 ├── backend/                    <-- Web Server (Package: lettu_backend)
-│   ├── pyproject.toml          <-- Backend Package Config (FastAPI, Uvicorn)
-│   └── src/
-│       └── lettu_backend/
-│           ├── __init__.py
-│           ├── main.py         <-- FastAPI entry point
-│           ├── test_link.py    <-- Verifies AI <-> Backend connection
-│           ├── api/            <-- API Route handlers (v1)
-│           ├── models/         <-- Database (database.py) & Domain models
-│           ├── services/       <-- Logic for AI and MQTT integrations
-│           └── repository/     <-- Database CRUD operations
+│   └── src/lettu_backend/
+│       ├── main.py             <-- FastAPI entry + run_system() launcher
+│       ├── core/
+│       │   ├── config.py       <-- Reads from .env (MQTT, DB, API Keys)
+│       │   └── security.py     <-- API Key & JWT auth
+│       ├── models/
+│       │   ├── database.py     <-- SQLAlchemy: ai_scans + sensor_readings
+│       │   └── domain.py       <-- Pydantic: Request/Response schemas
+│       ├── services/
+│       │   ├── broker_service.py   <-- Local MQTT Broker (127.0.0.1:1883)
+│       │   ├── mqtt_service.py     <-- MQTT Subscriber (routes data to DB)
+│       │   └── log_hub.py          <-- VS Code TUI (j/k log switcher)
+│       ├── repository/
+│       │   └── scan_repo.py    <-- DataRepository (ai_scans + sensor_readings CRUD)
+│       └── templates/
+│           ├── dashboard.html  <-- Live data dashboard (4 panels)
+│           └── simulator.html  <-- Hardware simulator
 │
 ├── embedded/                   <-- ESP32 Source Code (Work in progress)
-└── mobile/                     <-- Flutter Source Code (Work in progress)
+├── mobile/                     <-- Flutter Source Code (Work in progress)
+│
+├── data/lettu_vault.db         <-- SQLite Database (auto-created)
+├── clear_db.py                 <-- Utility: Wipe all records from DB
+└── verify_data.py              <-- Utility: Count records in each table
 ```
 
 ---
 
-## 🛠️ Complete Setup Steps
+## Architecture
 
-### 1. Environment Creation
+```
+.env (single source of config)
+    │
+    ▼
+[lettu_vault_start]
+    │
+    ▼
+[Log Hub TUI] ─── starts ──► [broker_service.py] → MQTT Broker @ 127.0.0.1:1883
+    │                                                       │
+    ├── starts (after 4s) ──► [main.py / uvicorn]          │ (message hub)
+    │                          FastAPI @ :8000              │
+    │                          + mqtt_service.py ◄──────────┤ (subscribes)
+    │                            ├── lettuvault/ai          │
+    │                            └── lettuvault/sensors     │
+    │                                                       │
+    └── starts ──────────────► [predict.py]   ─────────────┘
+                               AI Camera              (publishes)
+                               + YOLO Model
+```
 
-Open PowerShell inside the `LettuVault` root folder:
+---
+
+## Setup
 
 ```powershell
-# Create the environment
+# 1. Create and activate virtual environment
 python -m venv .venv
-
-# Activate it
 .\.venv\Scripts\Activate.ps1
 
-```
-
-### 2. The "One-Command" Installation
-
-This command reads your `requirements.txt`, installs the external libraries, and then hits the `-e .` line which uses your root `pyproject.toml` to link `lettu_vault_ai` and `lettu_backend` automatically.
-
-```powershell
+# 2. Install all dependencies
 pip install -r requirements.txt
 
-```
-
-### 3. Verification
-
-Run these to ensure the "Invisible Bridge" between packages is working:
-
-```powershell
-# Check AI Package
-python -c "import lettu_vault_ai; print('AI System: Linked Successfully')"
-
-# Check Backend Package
-python -c "import lettu_backend; print('Backend System: Linked Successfully')"
-
+# 3. Run database migrations (first time only)
+db-upgrade
 ```
 
 ---
 
-## 🚀 How to Run the System
-
-Since you are using a **Distributed Architecture**, you will run the services in separate terminal windows.
-
-**Terminal 1: The AI Worker**
-(Handles the heavy lifting: image processing and YOLO inference)
+## Running the System
 
 ```powershell
-python -m lettu_vault_ai.main
-
+lettu_vault_start
 ```
 
-**Terminal 2: The Web Server**
-(Handles the API requests from your Flutter app and ESP32)
+This opens a **TUI** in your VS Code terminal with 4 tabs:
+- **BROKER** (Yellow): Local MQTT server on `127.0.0.1:1883`
+- **BACKEND** (Green): FastAPI server on `http://localhost:8000`
+- **MQTT** (Cyan): Subscriber routing data to the database
+- **AI** (Magenta): Camera + YOLO detections with 3s stability check
 
-```powershell
-# We use 'lettu_backend.main:app' because of our package mapping
-uvicorn lettu_backend.main:app --reload
-
-```
+**Controls**: `j` (next tab) | `k` (prev tab) | `q` (quit all)
 
 ---
 
-### 💡 Pro-Tip for your Thesis
+## Quick Links
 
-By using the `-m` flag (e.g., `python -m lettu_vault_ai.main`), you are telling Python to run the script **as a module**. This ensures that all your internal imports work perfectly regardless of which folder you are currently standing in.
+| Page | URL |
+|---|---|
+| API Health | http://127.0.0.1:8000/ |
+| Live Dashboard | http://127.0.0.1:8000/dashboard |
+| Swagger API Docs | http://127.0.0.1:8000/docs |
+| Hardware Simulator | http://127.0.0.1:8000/simulator |
 
+---
+
+## Utility Scripts
+
+```powershell
+python verify_data.py    # Check how many records are in the DB
+python clear_db.py       # Wipe all records (keeps table structure)
+```
