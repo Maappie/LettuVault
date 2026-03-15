@@ -1,17 +1,17 @@
 # Python
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
+# build/  <-- Removed to prevent ignoring Flutter build/lib
+# lib/    <-- Removed to prevent ignoring Flutter build/lib
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# lib64/
 parts/
 sdist/
 var/
