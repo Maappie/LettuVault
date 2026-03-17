@@ -6,7 +6,7 @@ def main():
 
     # 1. Load the pre-trained Nano model
     print("🧠 Loading the YOLOv8 Nano model (yolov8n.pt)...")
-    model = YOLO(r'C:\Users\Raiz\LettuVault\ai_system\runs\lettuce_strawberry_v12\weights\best.pt') 
+    model = YOLO(r'C:\Users\Raiz\LettuVault\ai_system\runs\lettuce_strawberry_v114\weights\best.pt') 
 
     # 2. Get the folder where THIS script is sitting (C:\...\LettuVault\ai_system)
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +25,7 @@ def main():
     
     model.train(
         data=yaml_path,                
-        epochs=1,                    
+        epochs=3,                    
         imgsz=640,                     
         device='0',                  
         project=save_dir,              # 🎯 Forces results into ai_system/runs

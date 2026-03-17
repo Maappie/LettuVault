@@ -8,6 +8,7 @@ class AIScanBase(BaseModel):
     worm_count: int
     confidence_score: float
     image_name: str
+    image: Optional[str] = None  # Relative path: captures/scan_xyz.jpg
     label: Optional[str] = "Primary Camera"
 
 class AIScanCreate(AIScanBase):

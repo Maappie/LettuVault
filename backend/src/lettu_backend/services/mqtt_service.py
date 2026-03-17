@@ -2,11 +2,18 @@
 import paho.mqtt.client as mqtt
 import json
 import logging
+import base64
+import os
+import datetime
 from lettu_backend.core.config import settings
 from lettu_backend.models.database import SessionLocal
 from lettu_backend.repository.scan_repo import DataRepository
 
 logger = logging.getLogger("MQTT_SERVICE")
+
+# Folder where AI snapshots are stored (relative to project root)
+CAPTURES_DIR = os.path.join("data", "captures")
+os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 class MQTTService:
     def __init__(self):
@@ -41,6 +48,22 @@ class MQTTService:
                 clean_data = {k: v for k, v in data.items() if k != "api_key"}
                 
                 if msg.topic == settings.MQTT_TOPIC_AI:
+                    # Decode and save image snapshot if present
+                    image_rel_path = None
+                    image_b64 = clean_data.pop("image_b64", None)
+                    if image_b64:
+                        try:
+                            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                            filename = f"scan_{ts}.jpg"
+                            filepath = os.path.join(CAPTURES_DIR, filename)
+                            with open(filepath, "wb") as f:
+                                f.write(base64.b64decode(image_b64))
+                            image_rel_path = f"captures/{filename}"
+                            logger.info(f"📸 [SUBSCRIBER] Snapshot saved: {image_rel_path}")
+                        except Exception as img_err:
+                            logger.warning(f"⚠️ [SUBSCRIBER] Could not save snapshot: {img_err}")
+
+                    clean_data["image"] = image_rel_path
                     repo.create_ai_scan(clean_data)
                     logger.info("🧠 [SUBSCRIBER] Saved AI scan to Database")
                 elif msg.topic == settings.MQTT_TOPIC_SENSORS:
