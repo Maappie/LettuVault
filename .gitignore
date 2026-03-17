@@ -1,7 +1,7 @@
 # ==========================================
 # ROOT .gitignore — LettuVault Monorepo
 # ==========================================
-
+.vscode/
 # ---- Python ----
 **/__pycache__/
 *.py[cod]
