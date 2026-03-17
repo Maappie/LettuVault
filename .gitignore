@@ -50,8 +50,11 @@ data/*
 .vscode/ipch/
 
 # ---- AI Model Runs (large binary/log output) ----
-ai_system/runs/
-
+ai_system/runs/lettuce_strawberry_v111
+ai_system/runs/lettuce_strawberry_v112
+ai_system/runs/lettuce_strawberry_v113
+ai_system/runs/lettuce_strawberry_v114
+ai_system/runs/lettuce_strawberry_v115
 # ---- Temporary & Logs ----
 *.log
 tmp/
