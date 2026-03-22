@@ -18,16 +18,18 @@ Both the BME280 and SSD1306 OLED share the same I2C pins. You can daisy-chain th
 
 *Note: The BME280 uses address 0x76 by default in the code, while the OLED uses 0x3C.*
 
-### 2. Relays (Board 1 vs Board 2)
-The relays are configured as Logic HIGH triggers. The code automatically behaves differently based on the `DEVICE_ID` configured in `main.cpp`.
+### 2. Relay Modules (Two 4-Channel Boards)
+The code triggers these pins as Logic HIGH. Even though you have two physical relay boards, they are both hooked to the **same single ESP32**.
 
-| Relay Label | ESP32 Pin | Board 1 (`LettuVault-01`) | Board 2 (`LettuVault-02`) |
-| :--- | :--- | :--- | :--- |
-| **Relay 1 (IN1)** | **GPIO 25** | 30A Compressor (Cooling) | 10A (Pressure Control) |
-| **Relay 2 (IN2)** | **GPIO 26** | *Not Used* | 10A (Humidity Control) |
-| **Relay 3 (IN3)** | **GPIO 27** | *Not Used* | 10A (Spare/Future) |
-| **Relay VCC** | **5V (VIN)** | Power for Relay Coil | Power for Relay Coil |
-| **Relay GND** | **GND**      | Common Ground | Common Ground |
+| Relay Component | ESP32 Pin | Purpose |
+| :--- | :--- | :--- |
+| **Relay 1 (Board 1)** | **GPIO 25** | 30A Compressor (Cooling) |
+| **Relay 1 (Board 2)** | **GPIO 26** | 10A Vacuum Pump (Pressure) |
+| **Relay 2 (Board 2)** | **GPIO 27** | 10A Humidifier (Moisture) |
+| **VCC / JD-VCC** | **5V (VIN)** | Power for Relay Coils |
+| **GND** | **GND** | Common Ground |
+
+*Note: The code runs all three control loops simultaneously on Core 1.*
 
 ### 3. Membrane Keypad (4x4)
 Wire the 8 pins from the membrane keypad from left to right (facing the front of the keypad/buttons).
@@ -67,7 +69,7 @@ Open `src/main.cpp` and update these lines at the very top of the file to match 
 #define WIFI_SSID       "YourWiFi"
 #define WIFI_PASSWORD   "YourPass123!"
 #define MQTT_SERVER     "192.168.1.X" // Your PC/Server's Local IP
-#define DEVICE_ID       "ESP32-LettuVault-01" // Use -01 for Board 1, -02 for Board 2
+#define DEVICE_ID       "ESP32-LettuVault-01" 
 ```
 
 Upload the code to your ESP32 using the PlatformIO "Upload" button!
