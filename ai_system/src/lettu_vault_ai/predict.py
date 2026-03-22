@@ -102,20 +102,16 @@ def run_live_camera():
     if ai_cfg.MODEL_PATH and os.path.exists(ai_cfg.MODEL_PATH):
         model_path = ai_cfg.MODEL_PATH
     else:
-        package_dir   = os.path.dirname(os.path.abspath(__file__))
-        ai_system_dir = os.path.dirname(os.path.dirname(package_dir))
-        model_path    = os.path.join(ai_system_dir, 'runs', 'lettuce_strawberry_v112', 'weights', 'best.pt')
+        from lettu_backend.core.config import PROJECT_ROOT
+        model_path = os.path.join(PROJECT_ROOT, 'ai_system', 'runs', 'lettuce_strawberry_v112', 'weights', 'best.pt')
 
         if not os.path.exists(model_path):
-            model_path = os.path.join(ai_system_dir, 'yolov8n.pt')
+            model_path = os.path.join(PROJECT_ROOT, 'yolov8n.pt')
             print(f"[AI] Custom model not found, falling back to: {model_path}")
 
         if not os.path.exists(model_path):
-            root_dir   = os.path.dirname(ai_system_dir)
-            model_path = os.path.join(root_dir, 'yolov8n.pt')
-            if not os.path.exists(model_path):
-                print(f"[AI] Error: No model found. Set MODEL_PATH in ai_system/src/lettu_vault_ai/config.py")
-                return
+            print(f"[AI] Error: No model found. Set MODEL_PATH in ai_system/src/lettu_vault_ai/config.py")
+            return
 
     # --- Camera & Model Initialization ---
     print(f"[AI] Loading model: {model_path}")

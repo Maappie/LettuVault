@@ -9,8 +9,8 @@ from lettu_backend.services.mqtt.api_client import api_client
 
 logger = logging.getLogger("MQTT_SERVICE")
 
-# Folder where AI snapshots are stored (relative to project root)
-CAPTURES_DIR = os.path.join("data", "captures")
+# Folder where AI snapshots are stored (strictly relative to LettuVault root)
+from lettu_backend.core.config import CAPTURES_DIR
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 class AIActivityHandler:

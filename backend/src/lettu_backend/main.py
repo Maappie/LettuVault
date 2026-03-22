@@ -22,10 +22,10 @@ app = FastAPI(
 )
 
 # 🚀 Mount Versioned API Router
-app.include_router(api_v1_router, prefix="/api/v1")
+app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
-# 📸 Serve AI snapshot images from data/captures/
-CAPTURES_DIR = os.path.join("data", "captures")
+# 📸 Serve AI snapshot images from explicitly defined CAPTURES_DIR
+from lettu_backend.core.config import CAPTURES_DIR
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 app.mount("/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 

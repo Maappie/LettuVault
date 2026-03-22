@@ -28,9 +28,9 @@ LettuVault/                     <-- Root Folder (The Workspace)
 │       │   ├── database.py     <-- SQLAlchemy: ai_scans + sensor_readings
 │       │   └── domain.py       <-- Pydantic: Request/Response schemas
 │       ├── services/
-│       │   ├── broker_service.py   <-- Local MQTT Broker (127.0.0.1:1883)
-│       │   ├── mqtt_service.py     <-- MQTT Subscriber (routes data to DB)
-│       │   └── log_hub.py          <-- VS Code TUI (j/k log switcher)
+│       │   ├── broker_service.py   # Local MQTT Broker (127.0.0.1:1883)
+│       │   ├── mqtt/               # Modular MQTT Subsystem (Subscribers)
+│       │   └── log_hub.py          # VS Code TUI (j/k log switcher)
 │       ├── repository/
 │       │   └── scan_repo.py    <-- DataRepository (ai_scans + sensor_readings CRUD)
 │       └── templates/
@@ -60,7 +60,7 @@ LettuVault/                     <-- Root Folder (The Workspace)
     │                                                       │
     ├── starts (after 4s) ──► [main.py / uvicorn]          │ (message hub)
     │                          FastAPI @ :8000              │
-    │                          + mqtt_service.py ◄──────────┤ (subscribes)
+    │                          + mqtt module ◄──────────────┤ (subscribes)
     │                            ├── lettuvault/ai          │
     │                            └── lettuvault/sensors     │
     │                                                       │

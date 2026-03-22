@@ -6,10 +6,14 @@ def main():
 
     # 1. Load the pre-trained Nano model
     print("🧠 Loading the YOLOv8 Nano model (yolov8n.pt)...")
-    model = YOLO(r'C:\Users\Raiz\LettuVault\ai_system\runs\lettuce_strawberry_v111\weights\best.pt') 
+    from lettu_backend.core.config import PROJECT_ROOT
+    model_path = os.path.join(PROJECT_ROOT, 'ai_system', 'runs', 'lettuce_strawberry_v111', 'weights', 'best.pt')
+    if not os.path.exists(model_path):
+        model_path = os.path.join(PROJECT_ROOT, 'ai_system', 'yolov8n.pt')
+    model = YOLO(model_path) 
 
-    # 2. Get the folder where THIS script is sitting (C:\...\LettuVault\ai_system)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # 2. Get the folder where THIS script is sitting (relative to project root)
+    script_dir = os.path.join(PROJECT_ROOT, 'ai_system')
     
     # 3. Path to your data.yaml
     yaml_path = os.path.join(script_dir, 'datasets', 'data.yaml')
