@@ -21,14 +21,30 @@ MQTT_TOPIC  = settings.MQTT_TOPIC_AI
 #  MQTT Client Setup
 # =====================================================
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+PRODUCE_SCAN_REQUESTED = True  # Start true for initial startup check
+scan_start_time = time.time()  # Initialize globally
+
+def on_message(client, userdata, msg):
+    global PRODUCE_SCAN_REQUESTED, scan_start_time
+    try:
+        command = msg.payload.decode()
+        if command == "TRIGGER_PRODUCE_SCAN":
+            print("🚀 [AI] MQTT Command Received: Triggering Produce Scan...")
+            PRODUCE_SCAN_REQUESTED = True
+            scan_start_time = time.time() # Reset timeout clock
+    except Exception as e:
+        print(f"❌ [AI] Error processing MQTT command: {e}")
+
+mqtt_client.on_message = on_message
 
 def connect_mqtt():
     print(f"[AI] Attempting to connect to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
     while True:
         try:
             mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+            mqtt_client.subscribe("lettuvault/control")
             mqtt_client.loop_start()
-            print(f"[AI] Successfully connected to MQTT broker")
+            print(f"[AI] Successfully connected to MQTT broker & subscribed to control")
             return True
         except Exception as e:
             print(f"[AI] Connection failed ({e}), retrying in 5s...")
@@ -40,11 +56,21 @@ if not connect_mqtt():
 # =====================================================
 #  Send Detection Results
 # =====================================================
-def send_results_to_backend(summary, confidence, frame, image_name="camera_feed.jpg"):
-    """Captures a snapshot and publishes detection data + image to the MQTT broker."""
+# =====================================================
+#  Send Detection Results
+# =====================================================
+def send_results_to_backend(summary, confidence, frame, scan_type="condition"):
+    """Publishes detection data to MQTT with routing metadata."""
     summary_str = ", ".join([f"{v} {k}" for k, v in summary.items() if v > 0])
     
-    # Encode current frame as base64 JPEG for transport
+    # Identify specific produce if this is a produce scan
+    produce_type = None
+    if scan_type == "produce":
+        if summary.get("lettuce", 0) > 0: produce_type = "Lettuce"
+        elif summary.get("strawberry", 0) > 0: produce_type = "Strawberry"
+        else: produce_type = "Empty / Unknown"
+
+    # Encode frame
     image_b64 = None
     try:
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -54,15 +80,16 @@ def send_results_to_backend(summary, confidence, frame, image_name="camera_feed.
 
     payload = {
         "api_key": settings.X_API_KEY,
+        "scan_type": scan_type,
         "worm_count": summary.get("worms", 0),
         "confidence_score": float(confidence),
-        "image_name": image_name,
-        "image_b64": image_b64,   # base64 encoded snapshot
-        "label": summary_str if summary_str else "No Detections"
+        "image_b64": image_b64,
+        "label": summary_str if summary_str else "No Detections",
+        "produce_type": produce_type
     }
     try:
         mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
-        print(f"📤 [PUBLISHER] Detection Results: {summary_str} | 📸 Snapshot included")
+        print(f"📤 [PUBLISHER] ({scan_type.upper()}) Detected: {summary_str or 'Nothing'}")
     except Exception as e:
         print(f"❌ [AI] MQTT Publish Error: {e}")
 
@@ -70,13 +97,14 @@ def send_results_to_backend(summary, confidence, frame, image_name="camera_feed.
 #  Main Camera Loop
 # =====================================================
 def run_live_camera():
+    global PRODUCE_SCAN_REQUESTED, scan_start_time
     # --- Resolve Model Path ---
     if ai_cfg.MODEL_PATH and os.path.exists(ai_cfg.MODEL_PATH):
         model_path = ai_cfg.MODEL_PATH
     else:
         package_dir   = os.path.dirname(os.path.abspath(__file__))
         ai_system_dir = os.path.dirname(os.path.dirname(package_dir))
-        model_path    = os.path.join(ai_system_dir, 'runs', 'lettuce_strawberry_v12', 'weights', 'best.pt')
+        model_path    = os.path.join(ai_system_dir, 'runs', 'lettuce_strawberry_v112', 'weights', 'best.pt')
 
         if not os.path.exists(model_path):
             model_path = os.path.join(ai_system_dir, 'yolov8n.pt')
@@ -89,97 +117,119 @@ def run_live_camera():
                 print(f"[AI] Error: No model found. Set MODEL_PATH in ai_system/src/lettu_vault_ai/config.py")
                 return
 
+    # --- Camera & Model Initialization ---
     print(f"[AI] Loading model: {model_path}")
     model = YOLO(model_path)
-
-    # --- Open Camera ---
-    print(f"[AI] Opening camera index: {ai_cfg.CAMERA_INDEX}")
     cap = cv2.VideoCapture(ai_cfg.CAMERA_INDEX)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
 
     if not cap.isOpened():
         print(f"[AI] Error: Could not open camera {ai_cfg.CAMERA_INDEX}.")
-        print("[AI] Tip: Change CAMERA_INDEX in ai_system/src/lettu_vault_ai/config.py")
         return
 
-    print(f"[AI] Camera is LIVE at {ai_cfg.CAMERA_WIDTH}x{ai_cfg.CAMERA_HEIGHT}. Press 'q' to quit.")
+    print(f"[AI] Camera is LIVE. Press 'q' to quit.")
 
-    # --- Detection State ---
-    detection_start_time     = None
-    last_detection_time      = 0
-    last_timer_log_time      = 0
-    data_sent_for_current_event = False
+    # --- Continuous Monitor State (Worms/Wilting) ---
+    continuous_classes = ["worms", "wilting"]
+    produce_classes    = ["lettuce", "strawberry"]
+    
+    # Stability Trackers
+    cont_start_time = None
+    cont_last_time  = 0
+    cont_sent       = False
 
-    # Load stability settings from config
-    stability_threshold = ai_cfg.STABILITY_SECONDS
-    grace_period        = ai_cfg.GRACE_PERIOD_SECONDS
-    timer_log_interval  = ai_cfg.TIMER_LOG_INTERVAL
-    total_ms            = int(stability_threshold * 1000)
-
-    # Build detection summary template from tracked classes
-    detection_template = {cls: 0 for cls in ai_cfg.TRACKED_CLASSES}
+    prod_start_time = None
+    prod_last_time  = 0
+    last_publish_time = 0 # Produce cooldown
+    last_cont_publish_time = 0 # Condition cooldown
 
     while True:
         success, frame = cap.read()
-        if not success:
-            break
+        if not success: break
 
-        results = model.predict(
-            source=frame,
-            conf=ai_cfg.CONFIDENCE_THRESHOLD,
-            show=False,
-            stream=True,
-            verbose=False
-        )
+        results = list(model.predict(source=frame, conf=ai_cfg.CONFIDENCE_THRESHOLD, show=False, stream=True, verbose=False))
+        annotated_frame = frame.copy()
+        
+        # 1. 🔍 PROCESS MONITORS
+        continuous_summary = {cls: 0 for cls in continuous_classes}
+        max_conf_cont = 0.0
+        found_cont = False
 
-        detection_summary = detection_template.copy()
-        max_conf          = 0.0
-        total_detections  = 0
+        produce_summary = {cls: 0 for cls in produce_classes}
+        max_conf_prod = 0.0
+        found_prod = False
 
         for r in results:
             annotated_frame = r.plot()
             for box in r.boxes:
-                class_id   = int(box.cls[0])
-                class_name = model.names[class_id]
-                if class_name in detection_summary:
-                    detection_summary[class_name] += 1
+                cls_name = model.names[int(box.cls[0])]
                 conf = float(box.conf[0])
-                if conf > max_conf:
-                    max_conf = conf
-                total_detections += 1
+                
+                if cls_name in continuous_classes:
+                    continuous_summary[cls_name] += 1
+                    found_cont = True
+                    if conf > max_conf_cont: max_conf_cont = conf
+                
+                if PRODUCE_SCAN_REQUESTED and cls_name in produce_classes:
+                    produce_summary[cls_name] += 1
+                    found_prod = True
+                    if conf > max_conf_prod: max_conf_prod = conf
 
         if ai_cfg.SHOW_CAMERA_WINDOW:
             cv2.imshow(ai_cfg.CAMERA_WINDOW_TITLE, annotated_frame)
 
-        # --- Stability Trigger Logic ---
         current_time = time.time()
 
-        if total_detections > 0:
-            last_detection_time = current_time
-            if detection_start_time is None:
-                detection_start_time = current_time
-                last_timer_log_time  = current_time
-                print(f"[AI] Object detected! [0/{total_ms}ms]")
-            else:
-                duration   = current_time - detection_start_time
-                ms_elapsed = int(duration * 1000)
-
-                if not data_sent_for_current_event and (current_time - last_timer_log_time > timer_log_interval):
-                    print(f"[AI] Stability Check: {min(ms_elapsed, total_ms)}/{total_ms}ms")
-                    last_timer_log_time = current_time
-
-                if duration >= stability_threshold and not data_sent_for_current_event:
-                    print(f"[AI] Stability Reached: {total_ms}/{total_ms}ms. Capturing snapshot & sending!")
-                    send_results_to_backend(detection_summary, max_conf, annotated_frame)
-                    data_sent_for_current_event = True
+        # --- Continuous Logic (Worms/Wilting) ---
+        if found_cont:
+            cont_last_time = current_time
+            if cont_start_time is None: cont_start_time = current_time
+            
+            duration = current_time - cont_start_time
+            if duration >= ai_cfg.STABILITY_SECONDS and not cont_sent and (current_time - last_cont_publish_time > 5):
+                print(f"🪱 [AI] Continuous Stability Met. Sending {continuous_summary}")
+                
+                # Lock immediately
+                cont_sent = True 
+                last_cont_publish_time = current_time
+                
+                send_results_to_backend(continuous_summary, max_conf_cont, annotated_frame, scan_type="condition")
         else:
-            if detection_start_time is not None:
-                time_since_last_seen = current_time - last_detection_time
-                if time_since_last_seen > grace_period:
-                    print(f"[AI] Object lost (>{int(grace_period*1000)}ms). Resetting timer.")
-                    detection_start_time        = None
-                    data_sent_for_current_event = False
+            if cont_start_time and (current_time - cont_last_time > ai_cfg.GRACE_PERIOD_SECONDS):
+                cont_start_time = None
+                cont_sent = False
+
+        # --- One-Time Produce Logic (Lettuce/Strawberry) with 3s Rule ---
+        if PRODUCE_SCAN_REQUESTED:
+            if found_prod:
+                prod_last_time = current_time
+                if prod_start_time is None: 
+                    prod_start_time = current_time
+                    print(f"🥗 [AI] Produce detected! Waiting for stability ({ai_cfg.STABILITY_SECONDS}s)...")
+                
+                duration = current_time - prod_start_time
+                if duration >= ai_cfg.STABILITY_SECONDS and (current_time - last_publish_time > 5):
+                    print(f"✅ [AI] Produce Stability Reached. Saving to Database: {produce_summary}")
+                    
+                    # Update cooldown FIRST
+                    last_publish_time = current_time
+                    
+                    # LOCK IMMEDIATELY before sending
+                    PRODUCE_SCAN_REQUESTED = False 
+                    prod_start_time = None
+                    
+                    send_results_to_backend(produce_summary, max_conf_prod, annotated_frame, scan_type="produce")
+                    print("💤 [AI] Produce scan complete. Going to sleep until next trigger.")
+            else:
+                # Reset stability timer if lost during the 3-second window
+                if prod_start_time and (current_time - prod_last_time > ai_cfg.GRACE_PERIOD_SECONDS):
+                    print(f"🥗 [AI] Produce lost. Searching again...")
+                    prod_start_time = None
+                
+                # Pulse a log every 30 seconds to show we are still searching
+                if int(current_time) % 30 == 0 and int(current_time - 1) % 30 != 0:
+                    print("🔍 [AI] Still searching for produce inside the Hub...")
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

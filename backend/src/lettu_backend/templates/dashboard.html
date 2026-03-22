@@ -185,12 +185,25 @@
         <!-- SYSTEM CONFIG (ENVIRONMENT) TABLE - Full Width -->
         <div class="panel panel-full">
             <div class="panel-header">
-                <div class="category-title color-env">🌿 Environment Readings (System Config — BME280)</div>
+                <div class="category-title color-env">🌿 System Config</div>
             </div>
             <div class="panel-content-slim">
                 <table>
                     <thead><tr><th>Time</th><th>Temperature</th><th>Humidity</th><th>Pressure</th></tr></thead>
                     <tbody id="sysconfig-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- INTERNAL ENVIRONMENT READING TABLE - Full Width -->
+        <div class="panel panel-full">
+            <div class="panel-header">
+                <div class="category-title" style="color: var(--primary);">🌱 Internal Environment Reading</div>
+            </div>
+            <div class="panel-content-slim">
+                <table>
+                    <thead><tr><th>Time</th><th>Temperature</th><th>Humidity</th><th>Pressure</th></tr></thead>
+                    <tbody id="internal-env-body"></tbody>
                 </table>
             </div>
         </div>
@@ -221,28 +234,16 @@
             </div>
         </div>
 
-        <!-- STRAWBERRY DASHBOARD -->
-        <div class="panel">
+        <!-- PRODUCE DASHBOARD (Merged Lettuce & Strawberry) -->
+        <div class="panel panel-full">
             <div class="panel-header">
-                <div class="category-title color-strawberry">🍓 Strawberry Monitor</div>
+                <div class="category-title" style="color: #ec4899;">🥗 Produce Detected (Lettuce / Strawberry)</div>
+                <button class="view-btn-inline" onclick="triggerProduceDetection()" style="background: rgba(236, 72, 153, 0.1); color: #ec4899; border-color: rgba(236, 72, 153, 0.3);">🔍 Start Produce Detection</button>
             </div>
-            <div class="panel-content">
+            <div class="panel-content-slim">
                 <table>
-                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
-                    <tbody id="strawberry-body"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- LETTUCE DASHBOARD -->
-        <div class="panel">
-            <div class="panel-header">
-                <div class="category-title color-lettuce">🥬 Lettuce Growth</div>
-            </div>
-            <div class="panel-content">
-                <table>
-                    <thead><tr><th>Time</th><th>Count</th><th>Conf</th><th>Label</th><th>View</th></tr></thead>
-                    <tbody id="lettuce-body"></tbody>
+                    <thead><tr><th>Time</th><th>Produce Type</th><th>Confidence</th><th>Status</th><th>View Snapshot</th></tr></thead>
+                    <tbody id="produce-body"></tbody>
                 </table>
             </div>
         </div>
@@ -259,26 +260,43 @@
     <script>
         const API_KEY = '{{ x_api_key if x_api_key else "" }}';
 
+        async function triggerProduceDetection() {
+            try {
+                const res = await fetch('/api/v1/trigger-produce-scan', { 
+                    method: 'POST',
+                    headers: { 'X-API-KEY': API_KEY } 
+                });
+                if (res.ok) alert("PRODUCE SCAN TRIGGERED: Checking for Lettuce/Strawberry...");
+            } catch (e) { alert("Failed to trigger scan."); }
+        }
+
         async function loadAllData() {
             await loadAIScans();
             await loadSystemConfig();
+            await loadInternalEnv();
         }
 
         async function loadAIScans() {
             try {
-                const res = await fetch('/api/v1/ai-scans', { headers: { 'X-API-KEY': API_KEY } });
-                const scans = await res.json();
+                // 1. Fetch Condition Scans (Worms/Wilting)
+                const resCond = await fetch('/api/v1/ai-scans/condition', { headers: { 'X-API-KEY': API_KEY } });
+                const condScans = await resCond.json();
+                document.getElementById('worms-body').innerHTML = '';
+                document.getElementById('wilting-body').innerHTML = '';
                 
-                ['worms', 'wilting', 'strawberry', 'lettuce'].forEach(id => {
-                    document.getElementById(id + '-body').innerHTML = '';
-                });
-
-                scans.forEach(scan => {
+                condScans.forEach(scan => {
                     const labelLower = (scan.label || "").toLowerCase();
                     if (labelLower.includes('worms')) addAIRow('worms', scan, 'worms');
                     if (labelLower.includes('wilting')) addAIRow('wilting', scan, 'wilting');
-                    if (labelLower.includes('strawberry')) addAIRow('strawberry', scan, 'strawberry');
-                    if (labelLower.includes('lettuce')) addAIRow('lettuce', scan, 'lettuce');
+                });
+
+                // 2. Fetch Produce Scans (Lettuce/Strawberry)
+                const resProd = await fetch('/api/v1/ai-scans/produce', { headers: { 'X-API-KEY': API_KEY } });
+                const prodScans = await resProd.json();
+                document.getElementById('produce-body').innerHTML = '';
+
+                prodScans.forEach(scan => {
+                    addProduceRow(scan);
                 });
             } catch (e) { console.error("AI fetch error:", e); }
         }
@@ -311,6 +329,68 @@
             } catch (e) { console.error("System config fetch error:", e); }
         }
 
+        async function loadInternalEnv() {
+            try {
+                const res = await fetch('/api/v1/internal-environment', { headers: { 'X-API-KEY': API_KEY } });
+                const readings = await res.json();
+                
+                const body = document.getElementById('internal-env-body');
+                body.innerHTML = '';
+
+                readings.forEach(r => {
+                    const temp = r.temperature !== null ? r.temperature.toFixed(2) + '°C' : '--';
+                    const hum = r.humidity !== null ? r.humidity.toFixed(2) + '%' : '--';
+                    const press = r.pressure !== null ? r.pressure.toFixed(2) + ' hPa' : '--';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="timestamp">${new Date(r.timestamp).toLocaleString()}</td>
+                        <td><span class="pill-temp">🌡️ ${temp}</span></td>
+                        <td><span class="pill-hum">💧 ${hum}</span></td>
+                        <td><span class="pill-pres" style="background: rgba(34,211,238,0.1); color: var(--cyan);">📊 ${press}</span></td>
+                    `;
+                    body.appendChild(tr);
+                });
+            } catch (e) { console.error("Internal env fetch error:", e); }
+        }
+
+        function addProduceRow(s) {
+            const body = document.getElementById('produce-body');
+            const tr = document.createElement('tr');
+            
+            const hasImage = s.image && s.image.trim() !== '';
+            let viewBtn = createViewButton(s);
+
+            tr.innerHTML = `
+                <td class="timestamp">${new Date(s.timestamp).toLocaleString()}</td>
+                <td><span class="badge" style="background: rgba(236, 72, 153, 0.1); color: #ec4899;">${s.produce_type}</span></td>
+                <td>${Math.round(s.confidence_score * 100)}%</td>
+                <td><span class="badge" style="color: var(--primary);">✅ Healthy</span></td>
+                <td></td>
+            `;
+            tr.lastElementChild.appendChild(viewBtn);
+            body.appendChild(tr);
+        }
+
+        function createViewButton(s) {
+            const hasImage = s.image && s.image.trim() !== '';
+            if (hasImage) {
+                const btn = document.createElement('button');
+                btn.className = 'view-btn-inline';
+                btn.textContent = '\u{1F441}\uFE0F View';
+                btn.addEventListener('click', () => {
+                    openLightbox('/' + s.image, s.label || s.produce_type, new Date(s.timestamp).toLocaleString(), Math.round(s.confidence_score * 100) + '%');
+                });
+                return btn;
+            } else {
+                const btn = document.createElement('button');
+                btn.className = 'view-btn-inline';
+                btn.textContent = '\u2014';
+                btn.disabled = true;
+                return btn;
+            }
+        }
+
         function addAIRow(tableId, s, keyword) {
             const body = document.getElementById(tableId + '-body');
             const tr = document.createElement('tr');
@@ -323,26 +403,7 @@
                 }
             });
 
-            const hasImage = s.image && s.image.trim() !== '';
-            let viewBtn;
-            if (hasImage) {
-                viewBtn = document.createElement('button');
-                viewBtn.className = 'view-btn-inline';
-                viewBtn.textContent = '\u{1F441}\uFE0F View';
-                viewBtn.dataset.img  = '/' + s.image;
-                viewBtn.dataset.label = s.label || '';
-                viewBtn.dataset.time = new Date(s.timestamp).toLocaleString();
-                viewBtn.dataset.conf = Math.round(s.confidence_score * 100) + '%';
-                viewBtn.addEventListener('click', function() {
-                    openLightbox(this.dataset.img, this.dataset.label, this.dataset.time, this.dataset.conf);
-                });
-            } else {
-                viewBtn = document.createElement('button');
-                viewBtn.className = 'view-btn-inline';
-                viewBtn.textContent = '\u2014';
-                viewBtn.disabled = true;
-                viewBtn.title = 'No snapshot';
-            }
+            const viewBtn = createViewButton(s);
 
             tr.innerHTML = `
                 <td class="timestamp">${new Date(s.timestamp).toLocaleString()}</td>

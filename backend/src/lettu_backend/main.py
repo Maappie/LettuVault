@@ -8,7 +8,7 @@ import os
 
 from lettu_backend.core.config import settings
 from lettu_backend.api.v1.endpoints import router as api_v1_router
-from lettu_backend.services.mqtt_service import mqtt_service
+from lettu_backend.services.mqtt import mqtt_service
 
 # 📂 Set up templates directory
 template_dir = pathlib.Path(__file__).parent.resolve() / "templates"
@@ -31,6 +31,12 @@ app.mount("/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 
 @app.on_event("startup")
 def startup_event():
+    # Ensure tables are created (especially important after refactoring)
+    from lettu_backend.models.database import Base, engine
+    Base.metadata.create_all(bind=engine)
+    
+    # Enable Send-Only mode for the API server (Prevents duplicate row bugs)
+    mqtt_service.is_subscriber = False
     mqtt_service.start()
 
 # 🔒 CORS Middleware
