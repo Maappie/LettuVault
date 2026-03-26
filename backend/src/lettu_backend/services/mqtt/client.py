@@ -42,6 +42,13 @@ class MQTTClientWrapper:
                 logger.info(f"📥 [SUBSCRIBER] Subscribed OK → lettuvault/ack")
             else:
                 logger.error(f"❌ [SUBSCRIBER] Failed to subscribe to lettuvault/ack")
+
+            # Subscribe to the config sync topic
+            result_sync, _ = client.subscribe("lettuvault/config/sync")
+            if result_sync == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(f"📥 [SUBSCRIBER] Subscribed OK → lettuvault/config/sync")
+            else:
+                logger.error(f"❌ [SUBSCRIBER] Failed to subscribe to lettuvault/config/sync")
                 
             if not self.is_subscriber:
                 logger.info(f"📤 [PUBLISHER] API Server connected to Broker (Send-Only Mode + Ack Listener)")

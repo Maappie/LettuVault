@@ -16,12 +16,18 @@ import msvcrt
 # Configuration
 LOG_LIMIT = 100 
 
+from lettu_backend.core.config import PROJECT_ROOT
+
+# Detect the local .venv python for this project—CRITICAL FOR WINDOWS SYSTEM CONFLICTS
+venv_python = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+python_exe = venv_python if os.path.exists(venv_python) else sys.executable
+
 def sweep_zombies():
     """Aggressively kills any existing LettuVault processes before starting, excluding current PID."""
     if os.name == 'nt':
         my_pid = os.getpid()
         keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service"]
-        print(f"🔍 Sweeping for zombie processes (Excluding my PID: {my_pid})...")
+        print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
         try:
             # We use PowerShell for a more surgical strike that can exclude our own PID
             for kw in keywords:
@@ -30,7 +36,7 @@ def sweep_zombies():
             time.sleep(1) # Wait for OS to cleanup
         except:
             pass
-    print("✅ System swept. Starting fresh.")
+    print("[OK] System swept. Starting fresh.")
 
 def free_port(port):
     """Safely frees the port before starting, ignoring critical Windows System PIDs."""
@@ -54,30 +60,41 @@ def free_port(port):
 class LogHub:
     SERVICES = {
         "BROKER": {
-            "cmd": [sys.executable, "-m", "lettu_backend.services.broker_service"],
+            "cmd": [python_exe, "-m", "lettu_backend.services.broker_service"],
             "color": "yellow",
             "desc": "Central MQTT Hub"
         },
         "API SERVER": {
-            "cmd": [sys.executable, "-m", "uvicorn", "lettu_backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
+            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
             "color": "green",
             "desc": "Main Backend & Web"
         },
         "SUBSCRIBERS": {
-            "cmd": [sys.executable, "-m", "lettu_backend.services.mqtt"],
+            "cmd": [python_exe, "-m", "lettu_backend.services.mqtt"],
             "color": "cyan",
             "desc": "DB Storage"
         },
         "PUBLISHERS": {
-            "cmd": [sys.executable, "-m", "lettu_vault_ai.predict"],
+            "cmd": [python_exe, "-m", "lettu_vault_ai.predict"],
             "color": "magenta",
             "desc": "AI Detector"
+        },
+        "MOBILE_APP": {
+            "cmd": ["flutter", "run"],
+            "color": "blue",
+            "desc": "Flutter Mobile App"
         }
     }
 
-    def __init__(self):
+    def __init__(self, include_mobile=False):
+        self.include_mobile = include_mobile
+        # Define the basic service set
+        active_services = ["BROKER", "API SERVER", "SUBSCRIBERS", "PUBLISHERS"]
+        if self.include_mobile:
+            active_services.append("MOBILE_APP")
+            
         self.selected_index = 0
-        self.service_names = list(self.SERVICES.keys())
+        self.service_names = active_services
         self.running = True
         self.console = Console()
         self.logs = {name: deque(maxlen=LOG_LIMIT) for name in self.service_names}
@@ -96,6 +113,14 @@ class LogHub:
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONPATH"] = os.path.abspath(os.curdir) + ";" + env.get("PYTHONPATH", "")
 
+        # Special case for mobile: must run inside the mobile subdirectory
+        cwd = os.path.abspath(os.curdir)
+        if name == "MOBILE_APP":
+            # Attempt to locate the mobile directory
+            potential_path = os.path.join(cwd, "mobile", "LettuVault_Unfinished")
+            if os.path.exists(potential_path):
+                cwd = potential_path
+
         while self.running:
             try:
                 self.logs[name].append(f"🔄 [SYSTEM] Starting {name}...")
@@ -105,6 +130,7 @@ class LogHub:
                     stderr=subprocess.STDOUT,
                     text=True,
                     env=env,
+                    cwd=cwd,
                     bufsize=1,
                     encoding='utf-8',
                     errors='replace',
@@ -204,7 +230,11 @@ class LogHub:
         threading.Thread(target=self.capture_logs, args=("BROKER",), daemon=True).start()
         time.sleep(1) 
         
-        for name in ["API SERVER", "SUBSCRIBERS", "PUBLISHERS"]:
+        other_services = ["API SERVER", "SUBSCRIBERS", "PUBLISHERS"]
+        if self.include_mobile:
+            other_services.append("MOBILE_APP")
+
+        for name in other_services:
             threading.Thread(target=self.capture_logs, args=(name,), daemon=True).start()
             time.sleep(0.3)
 
@@ -228,16 +258,38 @@ class LogHub:
         finally:
             self.stop_all_services()
 
-def launch_hub():
+def launch_hub(include_mobile=False):
     # Full system sweep before starting anything
     sweep_zombies()
     free_port(8000)
     
+    if include_mobile:
+        emulator_id = "Medium_Phone_API_36.1"
+        print(f"[SCREEN] Launching emulator: {emulator_id}")
+        try:
+            subprocess.Popen(
+                ["flutter", "emulators", "--launch", emulator_id],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=True
+            )
+            # Wait for boot
+            print("[WAIT] Waiting 15s for emulator to boot...")
+            time.sleep(15)
+        except Exception:
+            print("[WARN] Emulator launch failed. Proceeding with Hub only.")
+
     try:
-        hub = LogHub()
+        hub = LogHub(include_mobile=include_mobile)
         hub.run()
     except Exception as e:
         print(f"FAILED TO START SYSTEM: {e}")
 
+def main_mobile():
+    """CLI Entry Point for the mobile launcher."""
+    launch_hub(include_mobile=True)
+
 if __name__ == "__main__":
-    launch_hub()
+    # Check for --mobile flag
+    has_mobile = "--mobile" in sys.argv
+    launch_hub(include_mobile=has_mobile)

@@ -77,3 +77,55 @@ def run_system():
     """Unified TUI Launcher with log switching."""
     from lettu_backend.services.log_hub import launch_hub
     launch_hub()
+
+def run_db_clear():
+    """Clears all transactional data tables without deleting the DB file."""
+    import sqlite3
+    import os
+    from lettu_backend.core.config import PROJECT_ROOT
+    
+    db_path = os.path.join(PROJECT_ROOT, "data", "lettu_vault.db")
+    if not os.path.exists(db_path):
+        print(f"❌ Database not found at {db_path}")
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        tables = [
+            ("AI Condition Scans", "ai_condition_scans"),
+            ("AI Produce Scans", "ai_produce_scans"),
+            ("Sensor Readings", "sensor_readings"),
+            ("System Config logs", "system_config"),
+            ("Internal Environment Readings", "internal_environment_readings")
+        ]
+
+        for name, table in tables:
+            try:
+                cursor.execute(f"DELETE FROM {table}")
+                print(f"🧹 Clearing {name}...")
+            except sqlite3.OperationalError as e:
+                print(f"⚪ Skipping {name} ({e})")
+
+        conn.commit()
+        conn.close()
+        print("✅ Database cleanup finished!")
+    except Exception as e:
+        print(f"❌ Error during clear: {e}")
+
+def run_migration():
+    """Generates a new migration script."""
+    import subprocess, sys
+    msg = sys.argv[1] if len(sys.argv) > 1 else "manual_update"
+    subprocess.run([sys.executable, "-m", "alembic", "-c", "backend/alembic.ini", "revision", "--autogenerate", "-m", msg])
+
+def run_history():
+    """Shows database migration history."""
+    import subprocess, sys
+    subprocess.run([sys.executable, "-m", "alembic", "-c", "backend/alembic.ini", "history"])
+
+def run_status():
+    """Shows current database migration status."""
+    import subprocess, sys
+    subprocess.run([sys.executable, "-m", "alembic", "-c", "backend/alembic.ini", "current"])
