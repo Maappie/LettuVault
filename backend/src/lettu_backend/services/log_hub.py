@@ -11,15 +11,24 @@ from rich.panel import Panel
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-import msvcrt 
+if os.name == 'nt':
+    import msvcrt
+else:
+    import sys as _sys
+    import select
+    import tty
+    import termios
 
 # Configuration
 LOG_LIMIT = 100 
 
 from lettu_backend.core.config import PROJECT_ROOT
 
-# Detect the local .venv python for this project—CRITICAL FOR WINDOWS SYSTEM CONFLICTS
-venv_python = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+# Detect the local .venv python for this project—CRITICAL FOR OS-SPECIFIC CONFLICTS
+if os.name == 'nt':
+    venv_python = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+else:
+    venv_python = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
 python_exe = venv_python if os.path.exists(venv_python) else sys.executable
 
 def sweep_zombies():
@@ -239,23 +248,42 @@ class LogHub:
             time.sleep(0.3)
 
         layout = self.make_layout()
+        old_settings = None
         try:
+            # On Linux, set terminal to cbreak mode for non-blocking key reads
+            if os.name != 'nt':
+                old_settings = termios.tcgetattr(_sys.stdin)
+                tty.setcbreak(_sys.stdin.fileno())
+
             with Live(layout, refresh_per_second=10, screen=True) as live:
                 while self.running:
                     layout["menu"].update(self.generate_menu())
                     layout["main"].update(self.generate_logs())
 
-                    if msvcrt.kbhit():
-                        key = msvcrt.getch().lower()
-                        if key == b'k': 
-                            self.selected_index = (self.selected_index - 1) % len(self.service_names)
-                        elif key == b'j':
-                            self.selected_index = (self.selected_index + 1) % len(self.service_names)
-                        elif key == b'q' or key == b'\x03': 
-                            self.running = False
+                    if os.name == 'nt':
+                        if msvcrt.kbhit():
+                            key = msvcrt.getch().lower()
+                            if key == b'k': 
+                                self.selected_index = (self.selected_index - 1) % len(self.service_names)
+                            elif key == b'j':
+                                self.selected_index = (self.selected_index + 1) % len(self.service_names)
+                            elif key == b'q' or key == b'\x03': 
+                                self.running = False
+                    else:
+                        if select.select([_sys.stdin], [], [], 0)[0]:
+                            key = _sys.stdin.read(1).lower()
+                            if key == 'k': 
+                                self.selected_index = (self.selected_index - 1) % len(self.service_names)
+                            elif key == 'j':
+                                self.selected_index = (self.selected_index + 1) % len(self.service_names)
+                            elif key == 'q' or key == '\x03': 
+                                self.running = False
                     
                     time.sleep(0.05)
         finally:
+            # Restore terminal settings on Linux
+            if old_settings is not None:
+                termios.tcsetattr(_sys.stdin, termios.TCSADRAIN, old_settings)
             self.stop_all_services()
 
 def launch_hub(include_mobile=False):
