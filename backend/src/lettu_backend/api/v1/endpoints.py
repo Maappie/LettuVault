@@ -49,10 +49,11 @@ def create_ai_scan(scan_in: dict, db: Session = Depends(get_db)):
             config_data = PRODUCE_CONFIGS[produce_type].copy()
             
             from lettu_backend.services.mqtt import mqtt_service
-            mqtt_service.send_config_with_ack(config_data.copy(), max_retries=1, timeout=2.0)
+            success = mqtt_service.send_config_with_ack(config_data.copy(), max_retries=1, timeout=2.0)
             
-            # Log it into the actual config table so it persists in the frontend
-            repo.create_system_config(config_data)
+            if success:
+                # Log it into the actual config table so it persists in the frontend
+                repo.create_system_config(config_data)
 
         return response
     return repo.create_condition_scan(scan_in)
@@ -90,11 +91,17 @@ def create_system_config(config_in: SystemConfigCreate, db: Session = Depends(ge
     
     # Forward the provided settings to the ESP32 via MQTT with ACK
     payload = {k: v for k, v in config_in.model_dump().items() if v is not None}
-    esp32_status = "ESP32 did not receive" # Default fallback
     
     if payload:
         success = mqtt_service.send_config_with_ack(payload, max_retries=3, timeout=3.0)
-        esp32_status = "ESP32 received" if success else "ESP32 did not receive"
+        if not success:
+            raise HTTPException(
+                status_code=503, 
+                detail="ESP32 did not acknowledge the configuration update. Backend update aborted."
+            )
+        esp32_status = "ESP32 received"
+    else:
+        raise HTTPException(status_code=400, detail="Empty configuration payload")
         
     db_result = repo.create_system_config(config_in.model_dump())
     

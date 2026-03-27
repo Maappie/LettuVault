@@ -94,6 +94,30 @@ def send_results_to_backend(summary, confidence, frame, scan_type="condition"):
         print(f"❌ [AI] MQTT Publish Error: {e}")
 
 # =====================================================
+#  Camera Connection Helper
+# =====================================================
+CAMERA_MAX_RETRIES = 6         # Try up to 6 times (= ~1 minute of total waiting)
+CAMERA_RETRY_INTERVAL = 10    # Seconds between retries
+
+def _open_camera():
+    """Attempts to open the camera with retry logic. Returns a cv2.VideoCapture or None."""
+    for attempt in range(1, CAMERA_MAX_RETRIES + 1):
+        cap = cv2.VideoCapture(ai_cfg.CAMERA_INDEX)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
+
+        if cap.isOpened():
+            return cap
+
+        cap.release()
+        if attempt < CAMERA_MAX_RETRIES:
+            print(f"⚠️ [AI] Could not open camera {ai_cfg.CAMERA_INDEX} (Attempt {attempt}/{CAMERA_MAX_RETRIES}). Retrying in {CAMERA_RETRY_INTERVAL}s...")
+            time.sleep(CAMERA_RETRY_INTERVAL)
+        else:
+            print(f"❌ [AI] Failed to open camera after {CAMERA_MAX_RETRIES} attempts. Giving up.")
+    return None
+
+# =====================================================
 #  Main Camera Loop
 # =====================================================
 def run_live_camera():
@@ -116,12 +140,8 @@ def run_live_camera():
     # --- Camera & Model Initialization ---
     print(f"[AI] Loading model: {model_path}")
     model = YOLO(model_path)
-    cap = cv2.VideoCapture(ai_cfg.CAMERA_INDEX)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
-
-    if not cap.isOpened():
-        print(f"[AI] Error: Could not open camera {ai_cfg.CAMERA_INDEX}.")
+    cap = _open_camera()
+    if cap is None:
         return
 
     print(f"[AI] Camera is LIVE. Press 'q' to quit.")
@@ -140,9 +160,21 @@ def run_live_camera():
     last_publish_time = 0 # Produce cooldown
     last_cont_publish_time = 0 # Condition cooldown
 
+    consecutive_failures = 0
     while True:
         success, frame = cap.read()
-        if not success: break
+        if not success:
+            consecutive_failures += 1
+            if consecutive_failures >= 30:
+                print(f"⚠️ [AI] Camera read failed {consecutive_failures} times. Attempting to reconnect...")
+                cap.release()
+                cap = _open_camera()
+                if cap is None:
+                    return
+                consecutive_failures = 0
+                print(f"✅ [AI] Camera reconnected successfully.")
+            continue
+        consecutive_failures = 0
 
         results = list(model.predict(source=frame, conf=ai_cfg.CONFIDENCE_THRESHOLD, show=False, stream=True, verbose=False))
         annotated_frame = frame.copy()
