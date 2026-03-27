@@ -22,7 +22,7 @@ polars-runtime-32==1.38.1
 psutil==7.2.2
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
-PyYAML==6.0.2
+PyYAML>=5.4.1
 requests==2.32.5
 scipy==1.15.3
 six==1.17.0
@@ -50,7 +50,7 @@ python-jose==3.5.0
 passlib==1.7.4
 cryptography==46.0.5
 rich==14.3.3
-amqtt==0.10.1
+amqtt==0.11.3
 
 # --- INSTALL YOUR LOCAL PACKAGES ---
 -e .

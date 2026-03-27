@@ -65,7 +65,7 @@ class LogHub:
             "desc": "Central MQTT Hub"
         },
         "API SERVER": {
-            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
+            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
             "color": "green",
             "desc": "Main Backend & Web"
         },
