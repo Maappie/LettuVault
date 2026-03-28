@@ -100,21 +100,38 @@ CAMERA_MAX_RETRIES = 6         # Try up to 6 times (= ~1 minute of total waiting
 CAMERA_RETRY_INTERVAL = 10    # Seconds between retries
 
 def _open_camera():
-    """Attempts to open the camera with retry logic. Returns a cv2.VideoCapture or None."""
+    """Attempts to find and open a working camera source with auto-discovery."""
+    # Determine which indices to try. Always try the configured preference first.
+    indices_to_try = [ai_cfg.CAMERA_INDEX]
+    # Add common fallback indices 0 through 4 to ensure dynamic detection
+    if isinstance(ai_cfg.CAMERA_INDEX, int):
+        indices_to_try += [i for i in range(5) if i != ai_cfg.CAMERA_INDEX]
+    else:
+        indices_to_try += [0, 1, 2, 3, 4]
+
     for attempt in range(1, CAMERA_MAX_RETRIES + 1):
-        cap = cv2.VideoCapture(ai_cfg.CAMERA_INDEX)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
+        for idx in indices_to_try:
+            print(f"🔍 [AI] Probing camera source: {idx}...")
+            cap = cv2.VideoCapture(idx)
+            
+            # Check if camera opened AND can actually read a frame
+            # (Linux sometimes creates blank /dev/video endpoints for metadata)
+            if cap.isOpened():
+                success, _ = cap.read()
+                if success:
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
+                    print(f"✅ [AI] Successfully locked onto active camera at source '{idx}'!")
+                    return cap
+            
+            cap.release()
 
-        if cap.isOpened():
-            return cap
-
-        cap.release()
         if attempt < CAMERA_MAX_RETRIES:
-            print(f"⚠️ [AI] Could not open camera {ai_cfg.CAMERA_INDEX} (Attempt {attempt}/{CAMERA_MAX_RETRIES}). Retrying in {CAMERA_RETRY_INTERVAL}s...")
+            print(f"⚠️ [AI] Could not find ANY working camera (Attempt {attempt}/{CAMERA_MAX_RETRIES}). Retrying in {CAMERA_RETRY_INTERVAL}s...")
             time.sleep(CAMERA_RETRY_INTERVAL)
         else:
-            print(f"❌ [AI] Failed to open camera after {CAMERA_MAX_RETRIES} attempts. Giving up.")
+            print(f"❌ [AI] Failed to find a camera after {CAMERA_MAX_RETRIES} attempts. Giving up.")
+            
     return None
 
 # =====================================================

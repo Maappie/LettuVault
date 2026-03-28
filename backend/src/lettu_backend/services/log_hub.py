@@ -108,6 +108,7 @@ class LogHub:
         self.console = Console()
         self.logs = {name: deque(maxlen=LOG_LIMIT) for name in self.service_names}
         self.processes = {} 
+        self.is_headless = not sys.stdin.isatty()
         os.makedirs("data", exist_ok=True)
         
         # Register the cleanup function to run even if the terminal window is closed abruptly
@@ -120,7 +121,7 @@ class LogHub:
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
-        env["PYTHONPATH"] = os.path.abspath(os.curdir) + ";" + env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = os.path.abspath(os.curdir) + os.pathsep + env.get("PYTHONPATH", "")
 
         # Special case for mobile: must run inside the mobile subdirectory
         cwd = os.path.abspath(os.curdir)
@@ -132,7 +133,10 @@ class LogHub:
 
         while self.running:
             try:
-                self.logs[name].append(f"🔄 [SYSTEM] Starting {name}...")
+                msg = f"🔄 [SYSTEM] Starting {name}..."
+                self.logs[name].append(msg)
+                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
+                
                 proc = subprocess.Popen(
                     service_cfg["cmd"],
                     stdout=subprocess.PIPE,
@@ -154,17 +158,23 @@ class LogHub:
                     
                     if stripped and not any(x in stripped for x in ["DeprecationWarning", "warn(", "Use `plugin`"]):
                         self.logs[name].append(stripped)
+                        if getattr(self, "is_headless", False):
+                            print(f"[{name}] {stripped}", flush=True)
                 
                 if not self.running:
                     break
                 
                 exit_code = proc.poll()
-                self.logs[name].append(f"⚠️ [SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s...")
+                msg = f"⚠️ [SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s..."
+                self.logs[name].append(msg)
+                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
                 time.sleep(3) 
                 
             except Exception as e:
                 if not self.running: break
-                self.logs[name].append(f"❌ [SYSTEM] Error in {name}: {str(e)}. Retrying in 5s...")
+                msg = f"❌ [SYSTEM] Error in {name}: {str(e)}. Retrying in 5s..."
+                self.logs[name].append(msg)
+                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
                 time.sleep(5)
 
     def stop_all_services(self):
@@ -246,6 +256,15 @@ class LogHub:
         for name in other_services:
             threading.Thread(target=self.capture_logs, args=(name,), daemon=True).start()
             time.sleep(0.3)
+
+        if getattr(self, "is_headless", False):
+            print("\n[SYSTEM] Headless mode detected. TUI bypassed. Services running continuously in background...")
+            try:
+                while self.running:
+                    time.sleep(1)
+            finally:
+                self.stop_all_services()
+            return
 
         layout = self.make_layout()
         old_settings = None

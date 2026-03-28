@@ -17,9 +17,9 @@
  * ---------------------------------------------------------------------------------------
  */
 // --- DEFAULT FALLBACKS (Used if NVS is empty) ---
-#define DEFAULT_WIFI_SSID       "Mappie"
+#define DEFAULT_WIFI_SSID       "LettuVault-01"
 #define DEFAULT_WIFI_PASSWORD   "Aa1231325213!"
-#define DEFAULT_MQTT_SERVER     "192.168.137.1"
+#define DEFAULT_MQTT_SERVER     "10.42.0.1"
 #define DEFAULT_MQTT_PORT       1883
 #define DEVICE_ID               "ESP32-LettuVault-01"
 #define API_KEY                 "lettuce-master-key-2024" 
@@ -278,17 +278,23 @@ void networkTask(void * parameter) {
         if (WiFi.status() != WL_CONNECTED) {
             wifiState = false;
             mqttState = false;
+            
+            Serial.printf("\n[NETWORK] Attempting WIFI -> SSID: '%s' | PASS: '%s'\n", wifi_ssid.c_str(), wifi_password.c_str());
+            
             WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
             
             int attempts = 0;
             while (WiFi.status() != WL_CONNECTED && attempts < 20) {
                 vTaskDelay(500 / portTICK_PERIOD_MS);
+                Serial.print(".");
                 attempts++;
             }
             
             if (WiFi.status() == WL_CONNECTED) {
+                Serial.printf("\n[NETWORK] WiFi Connected! IP: %s\n", WiFi.localIP().toString().c_str());
                 wifiState = true; 
             } else {
+                Serial.println("\n[NETWORK] WiFi Connection Failed. Retrying in 5s...");
                 vTaskDelay(5000 / portTICK_PERIOD_MS); 
                 continue; 
             }
@@ -298,10 +304,14 @@ void networkTask(void * parameter) {
 
         if (WiFi.status() == WL_CONNECTED && !client.connected()) {
             mqttState = false; 
+            Serial.printf("[NETWORK] Attempting MQTT connection to: %s:%d\n", mqtt_server_host.c_str(), mqtt_server_port);
             if (xSemaphoreTake(mqttMutex, portMAX_DELAY)) {
                 if (client.connect(DEVICE_ID)) {
                     client.subscribe(topic_control);
+                    Serial.println("[NETWORK] MQTT Connected!");
                     mqttState = true; 
+                } else {
+                    Serial.printf("[NETWORK] MQTT Failed, rc=%d. Retrying...\n", client.state());
                 }
                 xSemaphoreGive(mqttMutex); 
             }
@@ -330,6 +340,12 @@ void setup() {
     mqttMutex = xSemaphoreCreateMutex();
 
     preferences.begin("lettuvault", false);
+    
+    // --- FORCE UPDATE NVS CREDENTIALS ---
+    // Uncomment these 3 lines if you want to force the ESP32 to ignore old saved passwords
+    // preferences.putString("wifi_ssid", DEFAULT_WIFI_SSID);
+    // preferences.putString("wifi_pass", DEFAULT_WIFI_PASSWORD);
+    // preferences.putString("mqtt_serv", DEFAULT_MQTT_SERVER);
     
     // Load Network Settings
     wifi_ssid = preferences.getString("wifi_ssid", DEFAULT_WIFI_SSID);
