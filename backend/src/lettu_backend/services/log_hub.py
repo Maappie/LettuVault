@@ -74,7 +74,7 @@ class LogHub:
             "desc": "Central MQTT Hub"
         },
         "API SERVER": {
-            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", os.getenv("API_HOST", "0.0.0.0"), "--port", str(os.getenv("API_PORT", "8000")), "--reload"],
             "color": "green",
             "desc": "Main Backend & Web"
         },
@@ -289,7 +289,8 @@ class LogHub:
 def launch_hub(include_mobile=False):
     # Full system sweep before starting anything
     sweep_zombies()
-    free_port(8000)
+    api_port = int(os.getenv("API_PORT", "8000"))
+    free_port(api_port)
     
     if include_mobile:
         emulator_id = "Medium_Phone_API_36.1"

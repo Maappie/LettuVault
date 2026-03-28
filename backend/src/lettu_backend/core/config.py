@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     MQTT_PORT: int = int(os.getenv("MQTT_PORT") or 0)
     MQTT_TOPIC_SENSORS: str = os.getenv("MQTT_TOPIC_SENSORS")
     MQTT_TOPIC_AI: str = os.getenv("MQTT_TOPIC_AI")
+
+    # 🌐 Network Settings
+    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_PORT: int = int(os.getenv("API_PORT", "8000"))
     
     # 🔄 Loopback
     API_LOOPBACK_URL: str = os.getenv("API_LOOPBACK_URL", "http://localhost:8000")
