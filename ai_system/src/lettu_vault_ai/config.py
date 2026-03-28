@@ -26,7 +26,7 @@ CAMERA_HEIGHT = 480
 #   0.2 = Lenient: detects even uncertain objects (good for dim lighting)
 #   0.5 = Balanced: recommended for controlled environments
 #   0.7 = Strict: only reports high-confidence detections
-CONFIDENCE_THRESHOLD = 0.2
+CONFIDENCE_THRESHOLD = 0.6
 
 # Path to the custom YOLO model weights.
 # Leave as None to use auto-detection (looks for best.pt in runs/).
