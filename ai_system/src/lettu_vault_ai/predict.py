@@ -144,7 +144,7 @@ def run_live_camera():
         model_path = ai_cfg.MODEL_PATH
     else:
         from lettu_backend.core.config import PROJECT_ROOT
-        model_path = os.path.join(PROJECT_ROOT, 'ai_system', 'runs', 'lettuce_strawberry_v116', 'weights', 'last.pt')
+        model_path = os.path.join(PROJECT_ROOT, 'ai_system', 'runs', 'lettuce_strawberry_v116', 'weights', 'best.pt')
 
         if not os.path.exists(model_path):
             model_path = os.path.join(PROJECT_ROOT, 'yolov8n.pt')
