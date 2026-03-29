@@ -96,7 +96,6 @@ def run_db_clear():
         tables = [
             ("AI Condition Scans", "ai_condition_scans"),
             ("AI Produce Scans", "ai_produce_scans"),
-            ("Sensor Readings", "sensor_readings"),
             ("System Config logs", "system_config"),
             ("Internal Environment Readings", "internal_environment_readings")
         ]

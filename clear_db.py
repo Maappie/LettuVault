@@ -18,7 +18,6 @@ if os.path.exists(db_path):
 
         safe_delete("AI Condition Scans", "ai_condition_scans")
         safe_delete("AI Produce Scans", "ai_produce_scans")
-        safe_delete("Sensor Readings", "sensor_readings")
         safe_delete("System Config logs", "system_config")
         safe_delete("Internal Environment Readings", "internal_environment_readings")
         

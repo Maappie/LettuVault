@@ -38,13 +38,6 @@ class AIProduceScan(Base):
     produce_type = Column(String) # "Lettuce" or "Strawberry"
     label = Column(String) # Raw YOLO string
 
-class SensorReading(Base):
-    __tablename__ = "sensor_readings"
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=manila_now)
-    temperature = Column(Float)
-    humidity = Column(Float)  
-    device_id = Column(String) # E.g. "ESP32-Vault-01"
 
 class SystemConfig(Base):
     __tablename__ = "system_config"
@@ -61,3 +54,4 @@ class InternalEnvironmentReading(Base):
     temperature = Column(Float, nullable=True)
     humidity = Column(Float, nullable=True)
     pressure = Column(Float, nullable=True)
+    device_id = Column(String, nullable=True) 

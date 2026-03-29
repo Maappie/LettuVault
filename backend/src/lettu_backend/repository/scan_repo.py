@@ -1,6 +1,6 @@
 # backend/src/lettu_backend/repository/scan_repo.py
 from sqlalchemy.orm import Session
-from lettu_backend.models.database import AIConditionScan, AIProduceScan, SensorReading, SystemConfig, InternalEnvironmentReading
+from lettu_backend.models.database import AIConditionScan, AIProduceScan, SystemConfig, InternalEnvironmentReading
 
 class DataRepository:
     def __init__(self, db: Session):
@@ -27,12 +27,12 @@ class DataRepository:
         self.db.refresh(db_record)
         return db_record
 
-    # --- SENSOR METHODS ---
+    # --- SENSOR METHODS (now consolidated into InternalEnvironmentReading) ---
     def get_all_sensor_readings(self, limit: int = 100):
-        return self.db.query(SensorReading).order_by(SensorReading.timestamp.desc()).limit(limit).all()
+        return self.db.query(InternalEnvironmentReading).order_by(InternalEnvironmentReading.timestamp.desc()).limit(limit).all()
 
     def create_sensor_reading(self, data: dict):
-        db_record = SensorReading(**data)
+        db_record = InternalEnvironmentReading(**data)
         self.db.add(db_record)
         self.db.commit()
         self.db.refresh(db_record)

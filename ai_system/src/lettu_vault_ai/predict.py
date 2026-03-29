@@ -22,16 +22,20 @@ MQTT_TOPIC  = settings.MQTT_TOPIC_AI
 # =====================================================
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 PRODUCE_SCAN_REQUESTED = True  # Start true for initial startup check
+TEST_CAPTURE_REQUESTED = False
 scan_start_time = time.time()  # Initialize globally
 
 def on_message(client, userdata, msg):
-    global PRODUCE_SCAN_REQUESTED, scan_start_time
+    global PRODUCE_SCAN_REQUESTED, TEST_CAPTURE_REQUESTED, scan_start_time
     try:
         command = msg.payload.decode()
         if command == "TRIGGER_PRODUCE_SCAN":
             print("🚀 [AI] MQTT Command Received: Triggering Produce Scan...")
             PRODUCE_SCAN_REQUESTED = True
             scan_start_time = time.time() # Reset timeout clock
+        elif command == "FORCE_TEST_CAPTURE":
+            print("📸 [AI] MQTT Command Received: Forcing Test Capture...")
+            TEST_CAPTURE_REQUESTED = True
     except Exception as e:
         print(f"❌ [AI] Error processing MQTT command: {e}")
 
@@ -138,7 +142,7 @@ def _open_camera():
 #  Main Camera Loop
 # =====================================================
 def run_live_camera():
-    global PRODUCE_SCAN_REQUESTED, scan_start_time
+    global PRODUCE_SCAN_REQUESTED, TEST_CAPTURE_REQUESTED, scan_start_time
     # --- Resolve Model Path ---
     if ai_cfg.MODEL_PATH and os.path.exists(ai_cfg.MODEL_PATH):
         model_path = ai_cfg.MODEL_PATH
@@ -275,6 +279,12 @@ def run_live_camera():
                 # Pulse a log every 30 seconds to show we are still searching
                 if int(current_time) % 30 == 0 and int(current_time - 1) % 30 != 0:
                     print("🔍 [AI] Still searching for produce inside the Hub...")
+
+        # --- Manual Test Capture ---
+        if TEST_CAPTURE_REQUESTED:
+            print("📸 [AI] Taking Force Snapshot for Testing...")
+            TEST_CAPTURE_REQUESTED = False
+            send_results_to_backend({"Camera Test": 1}, 1.0, annotated_frame, scan_type="produce")
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

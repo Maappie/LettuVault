@@ -35,21 +35,6 @@ class AIProduceResponse(AIProduceBase):
     class Config:
         from_attributes = True
 
-# --- SENSOR DATA SCHEMAS ---
-class SensorReadingBase(BaseModel):
-    temperature: float
-    humidity: float
-    device_id: Optional[str] = "LettuVault-Hardware"
-
-class SensorReadingCreate(SensorReadingBase):
-    pass
-
-class SensorReadingResponse(SensorReadingBase):
-    id: int
-    timestamp: datetime
-    class Config:
-        from_attributes = True
-
 # --- SYSTEM CONFIG SCHEMAS ---
 class SystemConfigBase(BaseModel):
     temperature: Optional[float] = None
@@ -66,11 +51,12 @@ class SystemConfigResponse(SystemConfigBase):
     class Config:
         from_attributes = True
 
-# --- INTERNAL ENVIRONMENT SCHEMAS ---
+# --- INTERNAL ENVIRONMENT SCHEMAS (used for ALL BME280 sensor readings) ---
 class InternalEnvironmentReadingBase(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     pressure: Optional[float] = None
+    device_id: Optional[str] = None
 
 class InternalEnvironmentReadingCreate(InternalEnvironmentReadingBase):
     pass
