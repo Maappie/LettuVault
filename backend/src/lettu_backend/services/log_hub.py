@@ -33,18 +33,31 @@ python_exe = venv_python if os.path.exists(venv_python) else sys.executable
 
 def sweep_zombies():
     """Aggressively kills any existing LettuVault processes before starting, excluding current PID."""
-    if os.name == 'nt':
-        my_pid = os.getpid()
-        keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service"]
-        print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
-        try:
-            # We use PowerShell for a more surgical strike that can exclude our own PID
-            for kw in keywords:
-                ps_cmd = f"Get-Process | Where-Object {{ ($_.CommandLine -like '*{kw}*') -and ($_.Id -ne {my_pid}) }} | Stop-Process -Force"
-                subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True)
-            time.sleep(1) # Wait for OS to cleanup
-        except:
-            pass
+    my_pid = os.getpid()
+    keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service"]
+    print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
+    
+    try:
+        import psutil
+        for p in psutil.process_iter(['pid', 'cmdline']):
+            if p.pid == my_pid:
+                continue
+            cmdline = p.info.get('cmdline')
+            if cmdline:
+                cmd_str = ' '.join(cmdline).lower()
+                # Exclude the current log_hub process itself from accidental matches
+                if "sweep" in cmd_str or "log_hub" in cmd_str:
+                    continue
+                if any(kw in cmd_str for kw in keywords):
+                    try:
+                        p.terminate()
+                        print(f"🧹 [ZOMBIE KILLER] Terminated old process PID: {p.pid}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+        time.sleep(1) # Wait for OS to cleanup
+    except ImportError:
+        print("[WARN] psutil not found, skipping deep zombie sweep.")
+        
     print("[OK] System swept. Starting fresh.")
 
 def free_port(port):

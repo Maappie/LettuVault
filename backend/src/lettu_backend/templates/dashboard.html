@@ -458,6 +458,18 @@
           >
             🔍 Start Produce Detection
           </button>
+          <button
+            class="view-btn-inline"
+            onclick="triggerTestCapture()"
+            style="
+              background: rgba(96, 165, 250, 0.1);
+              color: var(--secondary);
+              border-color: rgba(96, 165, 250, 0.3);
+              margin-left: 8px;
+            "
+          >
+            📸 Test Capture
+          </button>
         </div>
         <div class="panel-content-slim">
           <table>
@@ -496,6 +508,19 @@
             alert("PRODUCE SCAN TRIGGERED: Checking for Lettuce/Strawberry...");
         } catch (e) {
           alert("Failed to trigger scan.");
+        }
+      }
+
+      async function triggerTestCapture() {
+        try {
+          const res = await fetch("/api/v1/test-camera", {
+            method: "POST",
+            headers: { "X-API-KEY": API_KEY },
+          });
+          if (res.ok)
+            alert("TEST CAPTURE TRIGGERED: Forcing AI to take a snapshot...");
+        } catch (e) {
+          alert("Failed to trigger test capture.");
         }
       }
 
