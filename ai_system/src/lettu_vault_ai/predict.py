@@ -125,6 +125,8 @@ def _open_camera():
                 if success:
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
                     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
+                    # Limit buffer size to get fresh frames instead of stale ones when FPS is limited
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     print(f"✅ [AI] Successfully locked onto active camera at source '{idx}'!")
                     return cap
             
@@ -182,7 +184,11 @@ def run_live_camera():
     last_cont_publish_time = 0 # Condition cooldown
 
     consecutive_failures = 0
+    actual_fps = 0.0
+    last_fps_time = time.time()
+    
     while True:
+        loop_start_time = time.time()
         success, frame = cap.read()
         if not success:
             consecutive_failures += 1
@@ -226,6 +232,7 @@ def run_live_camera():
                     if conf > max_conf_prod: max_conf_prod = conf
 
         if ai_cfg.SHOW_CAMERA_WINDOW:
+            cv2.putText(annotated_frame, f"FPS: {actual_fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.imshow(ai_cfg.CAMERA_WINDOW_TITLE, annotated_frame)
 
         current_time = time.time()
@@ -288,6 +295,18 @@ def run_live_camera():
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+        # --- Enforce FPS Target & Calculate Actual FPS ---
+        if hasattr(ai_cfg, 'TARGET_FPS') and ai_cfg.TARGET_FPS > 0:
+            elapsed_loop_time = time.time() - loop_start_time
+            sleep_time = (1.0 / ai_cfg.TARGET_FPS) - elapsed_loop_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+                
+        # Calculate actual FPS for display
+        curr_time = time.time()
+        actual_fps = 1.0 / (curr_time - last_fps_time) if (curr_time - last_fps_time) > 0 else 0
+        last_fps_time = curr_time
 
     cap.release()
     cv2.destroyAllWindows()

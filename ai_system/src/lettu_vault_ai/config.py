@@ -45,7 +45,10 @@ STABILITY_SECONDS = 3.0
 
 # Grace period (in seconds): if the object disappears briefly
 # within this window, the timer does NOT reset.
-GRACE_PERIOD_SECONDS = 0.6
+GRACE_PERIOD_SECONDS = 0.8
+
+# Target AI processing frames per second. Lower values save CPU on the Pi.
+TARGET_FPS = 2
 
 # How often to print the stability timer to the log (in seconds).
 # Lower = more frequent updates. Higher = less spam.
