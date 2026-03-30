@@ -48,10 +48,9 @@ const char* topic_config_sync = "lettuvault/config/sync";
 #define OLED_RESET    -1 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// --- BME280 Setup (I2C Bus 1 - Wire1: SDA=32, SCL=33) ---
-#define BME_SDA 32
-#define BME_SCL 33
-TwoWire I2C_BME = TwoWire(1);
+// --- BME280 Setup (Standard I2C Bus - Wire) ---
+// Using default Wire pins (SDA=21, SCL=22) shared with OLED
+bool isDisplayFound = false;
 
 // --- Keypad Setup ---
 const byte ROWS = 4; 
@@ -69,11 +68,13 @@ byte colPins[COLS] = {13, 14, 23, 15};
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-// --- NON-VOLATILE STORAGE FOR DESIRED SETTINGS ---
+// --- PREFERENCES FOR NETWORKING ---
 Preferences preferences;
-float set_temperature = 0.0;
-float set_humidity = 0.0;
-float set_pressure = 0.0;
+
+// --- AMNESIAC TARGET SETTINGS (Default values on boot) ---
+float set_temperature = 25.0;
+float set_humidity = 60.0;
+float set_pressure = 1200.0;
 
 // --- MENU STATE MACHINE ---
 enum MenuPage {
@@ -98,10 +99,12 @@ float currentSensorTemp = 0, currentSensorHum = 0, currentSensorPres = 0;
 
 // --- HARDWARE SAFETY & STATE VARIABLES ---
 unsigned long lastCompressorOffTime = 0;
+unsigned long lastVacuumOffTime     = 0;
+unsigned long lastHumidifierOffTime = 0;
 bool isCompressorRunning = false;
 bool isVacuumRunning = false;
 bool isHumidifierRunning = false;
-const unsigned long COMPRESSOR_LOCKOUT_MS = 180000; // 3 minutes
+const unsigned long RELAY_LOCKOUT_MS = 300000; // 5 minutes — prevents rapid cycling
 
 // --- RTOS & Object Setup ---
 Adafruit_BME280 bme;
@@ -109,6 +112,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 unsigned long lastMsg = 0;
+const unsigned long SENSOR_READ_INTERVAL_MS = 10000; // Interval for reading sensors and sending data (5 seconds)
 SemaphoreHandle_t mqttMutex; 
 TaskHandle_t NetworkTaskHandle;
 
@@ -126,13 +130,15 @@ String pendingAckId = "";
  * HELPER FUNCTION: UPDATE OLED DISPLAY
  */
 void updateDisplay() {
+    if (!isDisplayFound) return;
     display.clearDisplay();
     display.setCursor(0, 0);
     display.setTextSize(1);
 
     switch (currentPage) {
         case PAGE_HOME:
-            display.printf("WIFI:%s | MQTT:%s\n", wifiState ? "OK" : "NO", mqttState ? "OK" : "NO");
+            display.print("WIFI:"); display.print(wifiState ? "OK" : "NO");
+            display.print(" | MQTT:"); display.println(mqttState ? "OK" : "NO");
             display.println(F("1. System Config"));
             display.println(F("2. System Read"));
             display.println(F("3. Network Config"));
@@ -246,21 +252,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
         if (!doc["temperature"].isNull()) {
             float new_temp = doc["temperature"].as<float>();
             if (set_temperature != new_temp) {
-                lastCompressorOffTime = millis() - COMPRESSOR_LOCKOUT_MS; 
+                lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS; 
                 Serial.printf("[HVAC] Target temp changed to %.1f. Lockout bypassed.\n", new_temp);
             }
             set_temperature = new_temp;
-            preferences.putFloat("set_temp", set_temperature);
             changed = true;
         }
         if (!doc["humidity"].isNull()) {
             set_humidity = doc["humidity"].as<float>();
-            preferences.putFloat("set_hum", set_humidity);
             changed = true;
         }
         if (!doc["pressure"].isNull()) {
             set_pressure = doc["pressure"].as<float>();
-            preferences.putFloat("set_pres", set_pressure);
             changed = true;
         }
         
@@ -306,7 +309,13 @@ void networkTask(void * parameter) {
             mqttState = false; 
             Serial.printf("[NETWORK] Attempting MQTT connection to: %s:%d\n", mqtt_server_host.c_str(), mqtt_server_port);
             if (xSemaphoreTake(mqttMutex, portMAX_DELAY)) {
-                if (client.connect(DEVICE_ID)) {
+                // The PubSubClient connection routine can block up to 15 seconds waiting 
+                // for the broker, which triggers the Core 0 Watchdog. We temporarily disable it.
+                disableCore0WDT(); 
+                bool isConnected = client.connect(DEVICE_ID);
+                enableCore0WDT();
+                
+                if (isConnected) {
                     client.subscribe(topic_control);
                     Serial.println("[NETWORK] MQTT Connected!");
                     mqttState = true; 
@@ -347,52 +356,62 @@ void setup() {
     // preferences.putString("wifi_pass", DEFAULT_WIFI_PASSWORD);
     // preferences.putString("mqtt_serv", DEFAULT_MQTT_SERVER);
     
-    // Load Network Settings
-    wifi_ssid = preferences.getString("wifi_ssid", DEFAULT_WIFI_SSID);
-    wifi_password = preferences.getString("wifi_pass", DEFAULT_WIFI_PASSWORD);
-    mqtt_server_host = preferences.getString("mqtt_serv", DEFAULT_MQTT_SERVER);
-    mqtt_server_port = preferences.getInt("mqtt_port", DEFAULT_MQTT_PORT);
-
-    // Load Setpoints
-    set_temperature = preferences.getFloat("set_temp", 25.0); 
-    set_humidity = preferences.getFloat("set_hum", 60.0); 
-    set_pressure = preferences.getFloat("set_pres", 1013.25);
+    // Load Network Settings (checking isKey first to avoid ESP32 core NOT_FOUND error logs)
+    wifi_ssid = preferences.isKey("wifi_ssid") ? preferences.getString("wifi_ssid") : String(DEFAULT_WIFI_SSID);
+    wifi_password = preferences.isKey("wifi_pass") ? preferences.getString("wifi_pass") : String(DEFAULT_WIFI_PASSWORD);
+    mqtt_server_host = preferences.isKey("mqtt_serv") ? preferences.getString("mqtt_serv") : String(DEFAULT_MQTT_SERVER);
+    mqtt_server_port = preferences.isKey("mqtt_port") ? preferences.getInt("mqtt_port") : DEFAULT_MQTT_PORT;
+    // --- Setpoints are now Amnesiac ---
+    // Will start with hardcoded default values and wait for Backend Sync to update.
 
     client.setServer(mqtt_server_host.c_str(), mqtt_server_port);
     client.setCallback(callback);
     client.setBufferSize(512);
 
-    I2C_BME.begin(BME_SDA, BME_SCL);
-    unsigned status = bme.begin(0x76, &I2C_BME);
-    if (!status) status = bme.begin(0x77, &I2C_BME);
+    // --- I2C Initialization ---
+    Wire.begin(); // Standard I2C: SDA=21, SCL=22
+    delay(100);   // settle time for I2C pins
+    
+    // --- BME280 Initialization ---    
+    Serial.println(F("[BME280] Probing standard I2C bus at address 0x76..."));
+    if (bme.begin(0x76, &Wire)) {
+        Serial.println(F("[BME280] ✅ Found at 0x76!"));
+    } else {
+        Serial.println(F("[BME280] Not found at 0x76. Trying 0x77..."));
+        if (bme.begin(0x77, &Wire)) {
+            Serial.println(F("[BME280] ✅ Found at 0x77!"));
+        } else {
+            Serial.println(F("[BME280] ❌ ERROR: Sensor not found! Check wiring (SDA=21, SCL=22) and I2C address."));
+        }
+    }
 
     if(display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
         display.setTextColor(SSD1306_WHITE);
         display.setTextSize(1);
+        isDisplayFound = true;
+    } else {
+        Serial.println(F("[OLED] ❌ ERROR: OLED display not found at 0x3C. Screen will be disabled."));
+        isDisplayFound = false;
     }
 
     // Initialize ALL Relays
-    // Board 1 (Compressor): Active HIGH — HIGH=ON, LOW=OFF
     pinMode(RELAY_COMPRESSOR, OUTPUT);
     digitalWrite(RELAY_COMPRESSOR, LOW);  // OFF
-    // Board 2 (Vacuum, Humidifier): Active LOW — LOW=ON, HIGH=OFF
+    
     pinMode(RELAY_VACUUM, OUTPUT);
     digitalWrite(RELAY_VACUUM, HIGH);     // OFF
+    
     pinMode(RELAY_HUMIDIFIER, OUTPUT);
     digitalWrite(RELAY_HUMIDIFIER, HIGH); // OFF
-
-    preferences.begin("lettuvault", false);
-    set_temperature = preferences.getFloat("set_temp", 25.0); 
-    set_humidity = preferences.getFloat("set_hum", 60.0); 
-    set_pressure = preferences.getFloat("set_pres", 1013.25); 
 
     xTaskCreatePinnedToCore(
         networkTask, "NetworkTask", 10000, NULL, 1, &NetworkTaskHandle, 0                   
     );
 
-    // --- DESK TESTING FIX ADDED HERE ---
-    // Trick the ESP32 into thinking the compressor has already been off for 3 minutes
-    lastCompressorOffTime = 0 - COMPRESSOR_LOCKOUT_MS; 
+    // Bypass lockout on first boot so relays can act immediately if needed
+    lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS;
+    lastVacuumOffTime     = millis() - RELAY_LOCKOUT_MS;
+    lastHumidifierOffTime = millis() - RELAY_LOCKOUT_MS;
 }
 
 /*
@@ -442,9 +461,9 @@ void loop() {
             if (key == 'A') {
                 float val = inputBuffer.toFloat();
                 bool changed = false;
-                if (subPageMode == 0) { set_temperature = val; preferences.putFloat("set_temp", val); changed = true; }
-                else if (subPageMode == 1) { set_humidity = val; preferences.putFloat("set_hum", val); changed = true; }
-                else if (subPageMode == 2) { set_pressure = val; preferences.putFloat("set_pres", val); changed = true; }
+                if (subPageMode == 0) { set_temperature = val; changed = true; }
+                else if (subPageMode == 1) { set_humidity = val; changed = true; }
+                else if (subPageMode == 2) { set_pressure = val; changed = true; }
                 
                 if (changed && wifiState && mqttState) {
                     JsonDocument syncDoc;
@@ -538,6 +557,10 @@ void loop() {
                 mqtt_server_port = inputBuffer.toInt(); 
                 preferences.putString("mqtt_serv", mqtt_server_host);
                 preferences.putInt("mqtt_port", mqtt_server_port);
+                
+                // Force disconnect from the old MQTT server
+                client.disconnect(); 
+                
                 client.setServer(mqtt_server_host.c_str(), mqtt_server_port);
                 currentPage = PAGE_NET_CONFIG; 
                 inputBuffer = "";
@@ -550,8 +573,8 @@ void loop() {
         }
     }
 
-    // --- SENSOR & RELAY LOGIC (Runs every 5 seconds) ---
-    if (now - lastMsg > 5000) { 
+    // --- SENSOR & RELAY LOGIC (Runs periodically based on SENSOR_READ_INTERVAL_MS) ---
+    if (now - lastMsg > SENSOR_READ_INTERVAL_MS) { 
         lastMsg = now;
 
         currentSensorTemp = bme.readTemperature();
@@ -560,18 +583,38 @@ void loop() {
 
         if (isnan(currentSensorTemp) || isnan(currentSensorHum) || isnan(currentSensorPres)) return; 
 
-        Serial.printf("[CORE 1] Temp: %.2fC | Hum: %.2f%% | Pres: %.2fhPa\n", currentSensorTemp, currentSensorHum, currentSensorPres);
+        // --- BME280 SENSOR LOG ---
+        float dTemp = currentSensorTemp - set_temperature;
+        float dHum  = currentSensorHum  - set_humidity;
+        float dPres = currentSensorPres - set_pressure;
+        Serial.println(F("================================================"));
+        Serial.println(F("[BME280] Sensor Readings:"));
+        Serial.print(F("  TEMP : ")); Serial.print(currentSensorTemp, 2); Serial.print(F(" C   (Set: ")); Serial.print(set_temperature, 2); 
+        Serial.print(F(" | d: ")); Serial.print(dTemp >= 0 ? "+" : "-"); Serial.println(abs(dTemp), 2);
+        
+        Serial.print(F("  HUM  : ")); Serial.print(currentSensorHum, 2);  Serial.print(F(" %   (Set: ")); Serial.print(set_humidity, 2); 
+        Serial.print(F(" | d: ")); Serial.print(dHum >= 0 ? "+" : "-");  Serial.println(abs(dHum), 2);
+        
+        Serial.print(F("  PRES : ")); Serial.print(currentSensorPres, 2); Serial.print(F(" hPa (Set: ")); Serial.print(set_pressure, 2); 
+        Serial.print(F(" | d: ")); Serial.print(dPres >= 0 ? "+" : "-"); Serial.println(abs(dPres), 2);
+        
+        Serial.printf("[RELAYS]  Comp:%s  |  Vac:%s  |  Hum:%s\n", 
+                      isCompressorRunning ? "ON" : "OFF", isVacuumRunning ? "ON" : "OFF", isHumidifierRunning ? "ON" : "OFF");
+        Serial.println(F("================================================"));
 
         // Update display if we are on the reading page
         if (currentPage == PAGE_SYS_READ) forceDisplayUpdate = true;
 
         // --- 1. COMPRESSOR LOGIC (Board 1) ---
         if (currentSensorTemp > set_temperature + 1.5) {
-            if (!isCompressorRunning && (now - lastCompressorOffTime >= COMPRESSOR_LOCKOUT_MS)) {
+            if (!isCompressorRunning && (now - lastCompressorOffTime >= RELAY_LOCKOUT_MS)) {
                 digitalWrite(RELAY_COMPRESSOR, HIGH);
                 isCompressorRunning = true;
                 forceDisplayUpdate = true;
                 Serial.printf("[RELAY] Compressor ON  (Temp: %.2fC > Set: %.2fC)\n", currentSensorTemp, set_temperature);
+            } else if (!isCompressorRunning) {
+                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastCompressorOffTime)) / 1000;
+                Serial.printf("[RELAY] Compressor locked out. Ready in %lus\n", remaining);
             }
         } else if (currentSensorTemp <= set_temperature - 1.5) {
             if (isCompressorRunning) {
@@ -586,16 +629,20 @@ void loop() {
         // --- 2. VACUUM PUMP LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
         // ON when pressure is ABOVE setpoint, OFF when at or below
         if (currentSensorPres > set_pressure) {
-            if (!isVacuumRunning) {
+            if (!isVacuumRunning && (now - lastVacuumOffTime >= RELAY_LOCKOUT_MS)) {
                 digitalWrite(RELAY_VACUUM, LOW);   // Active LOW: LOW = ON
                 isVacuumRunning = true;
                 forceDisplayUpdate = true;
                 Serial.printf("[RELAY] Vacuum Pump ON  (Pres: %.2fhPa > Set: %.2fhPa)\n", currentSensorPres, set_pressure);
+            } else if (!isVacuumRunning) {
+                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastVacuumOffTime)) / 1000;
+                Serial.printf("[RELAY] Vacuum locked out. Ready in %lus\n", remaining);
             }
         } else {
             if (isVacuumRunning) {
                 digitalWrite(RELAY_VACUUM, HIGH);  // Active LOW: HIGH = OFF
                 isVacuumRunning = false;
+                lastVacuumOffTime = now;
                 forceDisplayUpdate = true;
                 Serial.printf("[RELAY] Vacuum Pump OFF (Pres: %.2fhPa <= Set: %.2fhPa)\n", currentSensorPres, set_pressure);
             }
@@ -604,16 +651,20 @@ void loop() {
         // --- 3. HUMIDIFIER LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
         // ON when humidity is BELOW setpoint, OFF when at or above
         if (currentSensorHum < set_humidity) {
-            if (!isHumidifierRunning) {
+            if (!isHumidifierRunning && (now - lastHumidifierOffTime >= RELAY_LOCKOUT_MS)) {
                 digitalWrite(RELAY_HUMIDIFIER, LOW);   // Active LOW: LOW = ON
                 isHumidifierRunning = true;
                 forceDisplayUpdate = true;
                 Serial.printf("[RELAY] Humidifier ON  (Hum: %.2f%% < Set: %.2f%%)\n", currentSensorHum, set_humidity);
+            } else if (!isHumidifierRunning) {
+                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastHumidifierOffTime)) / 1000;
+                Serial.printf("[RELAY] Humidifier locked out. Ready in %lus\n", remaining);
             }
         } else {
             if (isHumidifierRunning) {
                 digitalWrite(RELAY_HUMIDIFIER, HIGH);  // Active LOW: HIGH = OFF
                 isHumidifierRunning = false;
+                lastHumidifierOffTime = now;
                 forceDisplayUpdate = true;
                 Serial.printf("[RELAY] Humidifier OFF (Hum: %.2f%% >= Set: %.2f%%)\n", currentSensorHum, set_humidity);
             }
