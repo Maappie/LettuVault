@@ -68,13 +68,13 @@ byte colPins[COLS] = {13, 14, 23, 15};
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-// --- PREFERENCES FOR NETWORKING ---
+// --- NON-VOLATILE STORAGE FOR SETTINGS ---
 Preferences preferences;
 
-// --- AMNESIAC TARGET SETTINGS (Default values on boot) ---
-float set_temperature = 25.0;
-float set_humidity = 60.0;
-float set_pressure = 1200.0;
+// --- TARGET SETTINGS ---
+float set_temperature = 0.0;
+float set_humidity = 0.0;
+float set_pressure = 0.0;
 
 // --- MENU STATE MACHINE ---
 enum MenuPage {
@@ -256,14 +256,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
                 Serial.printf("[HVAC] Target temp changed to %.1f. Lockout bypassed.\n", new_temp);
             }
             set_temperature = new_temp;
+            preferences.putFloat("set_temp", set_temperature);
             changed = true;
         }
         if (!doc["humidity"].isNull()) {
             set_humidity = doc["humidity"].as<float>();
+            preferences.putFloat("set_hum", set_humidity);
             changed = true;
         }
         if (!doc["pressure"].isNull()) {
             set_pressure = doc["pressure"].as<float>();
+            preferences.putFloat("set_pres", set_pressure);
             changed = true;
         }
         
@@ -361,8 +364,10 @@ void setup() {
     wifi_password = preferences.isKey("wifi_pass") ? preferences.getString("wifi_pass") : String(DEFAULT_WIFI_PASSWORD);
     mqtt_server_host = preferences.isKey("mqtt_serv") ? preferences.getString("mqtt_serv") : String(DEFAULT_MQTT_SERVER);
     mqtt_server_port = preferences.isKey("mqtt_port") ? preferences.getInt("mqtt_port") : DEFAULT_MQTT_PORT;
-    // --- Setpoints are now Amnesiac ---
-    // Will start with hardcoded default values and wait for Backend Sync to update.
+    // Load Setpoints (using checking first to avoid ESP32 core NOT_FOUND error logs)
+    set_temperature = preferences.isKey("set_temp") ? preferences.getFloat("set_temp") : 25.0; 
+    set_humidity = preferences.isKey("set_hum") ? preferences.getFloat("set_hum") : 60.0; 
+    set_pressure = preferences.isKey("set_pres") ? preferences.getFloat("set_pres") : 1200.0;
 
     client.setServer(mqtt_server_host.c_str(), mqtt_server_port);
     client.setCallback(callback);
@@ -461,9 +466,9 @@ void loop() {
             if (key == 'A') {
                 float val = inputBuffer.toFloat();
                 bool changed = false;
-                if (subPageMode == 0) { set_temperature = val; changed = true; }
-                else if (subPageMode == 1) { set_humidity = val; changed = true; }
-                else if (subPageMode == 2) { set_pressure = val; changed = true; }
+                if (subPageMode == 0) { set_temperature = val; preferences.putFloat("set_temp", val); changed = true; }
+                else if (subPageMode == 1) { set_humidity = val; preferences.putFloat("set_hum", val); changed = true; }
+                else if (subPageMode == 2) { set_pressure = val; preferences.putFloat("set_pres", val); changed = true; }
                 
                 if (changed && wifiState && mqttState) {
                     JsonDocument syncDoc;
