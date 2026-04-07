@@ -11,7 +11,7 @@
 #   1 = First external USB camera
 #   2 = Second external USB camera
 #   "rtsp://..." = IP/Network camera stream URL
-CAMERA_INDEX = 0
+CAMERA_INDEX = 1
 
 # Resolution hint (camera may not support all values)
 # Common options: (640, 480), (1280, 720), (1920, 1080)
@@ -48,7 +48,7 @@ STABILITY_SECONDS = 3.0
 GRACE_PERIOD_SECONDS = 0.8
 
 # Target AI processing frames per second. Lower values save CPU on the Pi.
-TARGET_FPS = 2
+TARGET_FPS = 5
 
 # How often to print the stability timer to the log (in seconds).
 # Lower = more frequent updates. Higher = less spam.
@@ -67,7 +67,7 @@ MQTT_PORT_OVERRIDE   = None  # e.g., 1883 or None (use .env)
 # ----------------------------
 
 # Show the annotated camera window with bounding boxes
-SHOW_CAMERA_WINDOW = False
+SHOW_CAMERA_WINDOW = True
 
 # Window title
 CAMERA_WINDOW_TITLE = "LettuVault Live AI Detection"
