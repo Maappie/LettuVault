@@ -56,7 +56,7 @@ python -m uvicorn lettu_backend.main:app --host 0.0.0.0 --port 8000
 python -m lettu_backend.services.broker_service
 
 # MQTT Subscriber only
-python -m lettu_backend.services.mqtt_service
+python -m lettu_backend.services.mqtt
 
 # AI Camera only
 python -m lettu_vault_ai.predict

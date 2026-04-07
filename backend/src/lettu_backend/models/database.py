@@ -20,23 +20,24 @@ def manila_now():
 
 # Define the database table/model
 
-class AIScan(Base):
-    __tablename__ = "ai_scans"
+class AIConditionScan(Base):
+    __tablename__ = "ai_condition_scans"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=manila_now)
-    worm_count = Column(Integer)
+    worm_count = Column(Integer, default=0)
     confidence_score = Column(Float)
-    image_name = Column(String)  
-    image = Column(String, nullable=True)  # Relative path: captures/scan_xyz.jpg
-    label = Column(String)
+    image = Column(String, nullable=True) # Relative path
+    label = Column(String) # E.g. "1 worms, 2 wilting"
 
-class SensorReading(Base):
-    __tablename__ = "sensor_readings"
+class AIProduceScan(Base):
+    __tablename__ = "ai_produce_scans"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=manila_now)
-    temperature = Column(Float)
-    humidity = Column(Float)  
-    device_id = Column(String) # E.g. "ESP32-Vault-01"
+    confidence_score = Column(Float)
+    image = Column(String, nullable=True)
+    produce_type = Column(String) # "Lettuce" or "Strawberry"
+    label = Column(String) # Raw YOLO string
+
 
 class SystemConfig(Base):
     __tablename__ = "system_config"
@@ -45,3 +46,12 @@ class SystemConfig(Base):
     temperature = Column(Float)
     humidity = Column(Float)
     pressure = Column(Float)
+
+class InternalEnvironmentReading(Base):
+    __tablename__ = "internal_environment_readings"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=manila_now)
+    temperature = Column(Float, nullable=True)
+    humidity = Column(Float, nullable=True)
+    pressure = Column(Float, nullable=True)
+    device_id = Column(String, nullable=True) 

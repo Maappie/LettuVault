@@ -1,0 +1,18 @@
+[Unit]
+Description=LettuVault Standalone Server
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+# IMPORTANT: Adjust User and Path if your repo is not in /home/pi/LettuVault
+User=pi
+WorkingDirectory=/home/pi/LettuVault
+ExecStart=/bin/bash /home/pi/LettuVault/pi_setup/pi_run.sh
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=lettuvault
+
+[Install]
+WantedBy=multi-user.target

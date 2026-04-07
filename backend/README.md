@@ -20,7 +20,11 @@ lettu_backend/
 │   └── domain.py           # Pydantic: request/response schemas
 ├── services/
 │   ├── broker_service.py   # Local MQTT Broker (amqtt @ 127.0.0.1:1883)
-│   ├── mqtt_service.py     # MQTT Subscriber — routes data to DB tables
+│   ├── mqtt/               # Modular MQTT Subsystem
+│   │   ├── client.py       # Core paho-mqtt wrapper
+│   │   ├── router.py       # Topic dispatcher & security guard
+│   │   ├── rpc_manager.py  # Synchronous ACK management
+│   │   └── handlers/       # Business logic (AI, Sensors)
 │   └── log_hub.py          # VS Code TUI: 4-tab live log viewer
 └── repository/
     └── scan_repo.py        # DataRepository: CRUD for ai_scans + sensor_readings
@@ -90,6 +94,6 @@ python -m uvicorn lettu_backend.main:app --host 0.0.0.0 --port 8000
 # Local MQTT Broker only
 python -m lettu_backend.services.broker_service
 
-# MQTT Subscriber only
-python -m lettu_backend.services.mqtt_service
+# MQTT Subscriber only (Worker Mode)
+python -m lettu_backend.services.mqtt
 ```

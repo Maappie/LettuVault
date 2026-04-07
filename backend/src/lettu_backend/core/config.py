@@ -5,9 +5,18 @@ import os
 import pathlib
 
 # 📂 Load Environment Variables
-# find_dotenv() automatically searches upwards from this file 
-# to find the project root where .env lives.
-load_dotenv(find_dotenv())
+# find_dotenv() automatically climbs the directory tree until it finds .env
+dotenv_path = find_dotenv()
+load_dotenv(dotenv_path)
+
+# Single Source of Truth: The directory containing .env is our true project root!
+if dotenv_path:
+    PROJECT_ROOT = os.path.dirname(dotenv_path)
+else:
+    # Safe fallback just in case .env is ever missing
+    PROJECT_ROOT = os.getcwd()
+
+CAPTURES_DIR = os.path.join(PROJECT_ROOT, "data", "captures")
 
 class Settings(BaseSettings):
     # API Identity
@@ -31,6 +40,13 @@ class Settings(BaseSettings):
     MQTT_PORT: int = int(os.getenv("MQTT_PORT") or 0)
     MQTT_TOPIC_SENSORS: str = os.getenv("MQTT_TOPIC_SENSORS")
     MQTT_TOPIC_AI: str = os.getenv("MQTT_TOPIC_AI")
+
+    # 🌐 Network Settings
+    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    
+    # 🔄 Loopback
+    API_LOOPBACK_URL: str = os.getenv("API_LOOPBACK_URL", "http://localhost:8000")
 
     class Config:
         case_sensitive = True

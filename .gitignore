@@ -58,3 +58,5 @@ ai_system/runs/lettuce_strawberry_v115
 # ---- Temporary & Logs ----
 *.log
 tmp/
+
+.cache

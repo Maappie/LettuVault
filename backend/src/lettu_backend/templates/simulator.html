@@ -174,48 +174,63 @@
           PUBLISH DATA
         </button>
         <button class="tab-btn" onclick="switchTab('fetch')">FETCH DATA</button>
+        <button class="tab-btn" onclick="switchTab('config')">SYSTEM CONFIG</button>
       </div>
 
-      <!-- Tab 1: Publish -->
+      <!-- Tab 1: Publish (Simulator) -->
       <div id="publish-content" class="tab-content active">
         <div id="publish-status" class="status-msg">
           ✅ Record successfully saved!
         </div>
-        <div class="field">
-          <label>Worm Count</label>
-          <input type="number" id="worm_count" value="5" />
+        
+        <div style="background: rgba(34, 211, 238, 0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(34, 211, 238, 0.2); margin-bottom: 20px;">
+          <label style="color: var(--cyan); margin-bottom: 10px;">🌡️ BME280 SENSOR SIMULATOR</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="field">
+              <label>Temp (°C)</label>
+              <input type="number" step="0.1" id="temperature" value="24.5" />
+            </div>
+            <div class="field">
+              <label>Humidity (%)</label>
+              <input type="number" step="0.1" id="humidity" value="62.0" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Pressure (hPa)</label>
+            <input type="number" step="0.1" id="pressure" value="1013.2" />
+          </div>
+          <button class="primary" style="margin-top: 10px;" onclick="sendSensorData()">🚀 SEND SIMULATED BME280 DATA</button>
         </div>
-        <div class="field">
-          <label>Confidence Score (0.0 - 1.0)</label>
-          <input type="number" step="0.01" id="confidence_score" value="0.94" />
+
+        <div style="background: rgba(74, 222, 128, 0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(74, 222, 128, 0.2);">
+          <label style="color: var(--primary); margin-bottom: 10px;">🧠 AI DETECTION SIMULATOR</label>
+          <div class="field">
+            <label>Detection Type</label>
+            <select id="scan_type" style="width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 12px; color: white;">
+              <option value="condition">🪱/🍂 Condition Scan (Worms/Wilting)</option>
+              <option value="produce">🥗 Produce Scan (Lettuce/Strawberry)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Worm Count / Type</label>
+            <input type="text" id="label" value="1 Worms" />
+          </div>
+          <div class="field">
+            <label>Confidence (0.0 - 1.0)</label>
+            <input type="number" step="0.01" id="confidence_score" value="0.98" />
+          </div>
+          <button class="primary" onclick="sendAIData()">SEND SIMULATED AI RESULT</button>
+          <button class="secondary" style="margin-top: 10px; background: rgba(94, 234, 212, 0.1); color: #2dd4bf; border: 1px solid rgba(94, 234, 212, 0.3);" onclick="triggerRealCameraTest()">📸 TRIGGER REAL CAMERA TEST</button>
         </div>
-        <div class="field">
-          <label>Temperature (€C)</label>
-          <input type="number" step="0.1" id="temperature" value="22.5" />
-        </div>
-        <div class="field">
-          <label>Humidity (%)</label>
-          <input type="number" step="0.1" id="humidity" value="65.0" />
-        </div>
-        <div class="field">
-          <label>Scan Note / Name</label>
-          <input
-            type="text"
-            id="name"
-            placeholder="E.g. Batch #42 Morning Check"
-          />
-        </div>
-        <button class="primary" onclick="sendData()">PUBLISH TO VAULT</button>
       </div>
 
       <!-- Tab 2: Fetch -->
       <div id="fetch-content" class="tab-content">
         <div id="fetch-status" class="status-msg">✅ Record retrieved!</div>
         <div class="field">
-          <label>Fetch Mode</label>
+          <label>Fetch Table</label>
           <select
-            id="fetch_mode"
-            onchange="toggleFetchId()"
+            id="fetch_table"
             style="
               width: 100%;
               padding: 12px;
@@ -226,16 +241,45 @@
               margin-bottom: 1rem;
             "
           >
-            <option value="all">Get All Scans</option>
-            <option value="single">Get Specific Scan by ID</option>
+            <option value="ai-scans/condition">🪱 AI Condition Scans</option>
+            <option value="ai-scans/produce">🥗 AI Produce Scans</option>
+            <option value="internal-environment">🌡️ Internal Environment (BME280 Readings)</option>
+            <option value="system_config">🌿 System Config History</option>
           </select>
-        </div>
-        <div id="scan_id_field" class="field" style="display: none">
-          <label>Scan ID</label>
-          <input type="number" id="scan_id" placeholder="Enter Numeric ID" />
         </div>
         <button class="secondary" onclick="fetchData()">
           FETCH FROM VAULT
+        </button>
+      </div>
+
+      <!-- Tab 3: Config -->
+      <div id="config-content" class="tab-content">
+        <div id="config-status" class="status-msg">✅ System Config updated!</div>
+        <p>Set specific values to update on backend and send to ESP32. Leave blank if unchanged.</p>
+        
+        <div class="field" style="background:#1e293b; padding:10px; border-radius:5px; margin-bottom:15px; border:1px solid #334155;">
+          <label style="color: #4ade80; margin-bottom:8px;">🥬🌿 Standard Produce Presets</label>
+          <select id="produce_preset" onchange="applyPreset()" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px;">
+            <option value="custom">🛠️ Custom User Values</option>
+            <option value="lettuce">🥗 Lettuce (Standard 1,1,1)</option>
+            <option value="strawberry">🍓 Strawberry (Standard 2,2,2)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Set Temperature (€C)</label>
+          <input type="number" step="0.1" id="config_temperature" placeholder="e.g. 24.5" />
+        </div>
+        <div class="field">
+          <label>Set Humidity (%)</label>
+          <input type="number" step="0.1" id="config_humidity" placeholder="e.g. 60.0" />
+        </div>
+        <div class="field">
+          <label>Set Pressure (hPa)</label>
+          <input type="number" step="0.1" id="config_pressure" placeholder="e.g. 1013.2" />
+        </div>
+        <button class="secondary" style="background: #fbbf24; color: #78350f" onclick="sendConfig()">
+          PUBLISH CONFIG
         </button>
       </div>
 
@@ -267,13 +311,39 @@
             .querySelector(".tab-btn:nth-child(1)")
             .classList.add("active");
           document.getElementById("publish-content").classList.add("active");
-        } else {
+        } else if (tab === "fetch") {
           document
             .querySelector(".tab-btn:nth-child(2)")
             .classList.add("active");
           document.getElementById("fetch-content").classList.add("active");
+        } else if (tab === "config") {
+          document
+            .querySelector(".tab-btn:nth-child(3)")
+            .classList.add("active");
+          document.getElementById("config-content").classList.add("active");
         }
         document.getElementById("response").style.display = "none";
+      }
+
+      function applyPreset() {
+        const val = document.getElementById("produce_preset").value;
+        const temp = document.getElementById("config_temperature");
+        const hum = document.getElementById("config_humidity");
+        const pres = document.getElementById("config_pressure");
+        
+        if (val === "lettuce") {
+            temp.value = "1.0";
+            hum.value = "1.0";
+            pres.value = "1.0";
+        } else if (val === "strawberry") {
+            temp.value = "2.0";
+            hum.value = "2.0";
+            pres.value = "2.0";
+        } else {
+            temp.value = "";
+            hum.value = "";
+            pres.value = "";
+        }
       }
 
       function toggleFetchId() {
@@ -282,34 +352,61 @@
           mode === "single" ? "block" : "none";
       }
 
-      async function sendData() {
+      async function sendSensorData() {
         const data = {
-          worm_count: parseInt(document.getElementById("worm_count").value),
-          confidence_score: parseFloat(
-            document.getElementById("confidence_score").value,
-          ),
-          image_name: "simulated_capture.jpg",
           temperature: parseFloat(document.getElementById("temperature").value),
           humidity: parseFloat(document.getElementById("humidity").value),
-          name: document.getElementById("name").value,
+          pressure: parseFloat(document.getElementById("pressure").value),
+          device_id: "SIMULATOR-01"
         };
+        await performRequest("/api/v1/internal-environment", "POST", data, "publish-status");
+      }
 
-        await performRequest("/api/v1/scans", "POST", data, "publish-status");
+      async function sendAIData() {
+        const scanType = document.getElementById("scan_type").value;
+        const data = {
+          scan_type: scanType,
+          confidence_score: parseFloat(document.getElementById("confidence_score").value),
+          label: document.getElementById("label").value,
+          image: null
+        };
+        
+        // Match backend logic: produce scans need produce_type
+        if (scanType === "produce") {
+            data.produce_type = data.label.split(' ')[0] || "Lettuce";
+        } else {
+            data.worm_count = parseInt(data.label.split(' ')[0]) || 0;
+        }
+
+        await performRequest("/api/v1/ai-scans", "POST", data, "publish-status");
+      }
+
+      async function triggerRealCameraTest() {
+        await performRequest("/api/v1/test-camera", "POST", null, "publish-status");
       }
 
       async function fetchData() {
-        const mode = document.getElementById("fetch_mode").value;
-        let url = "/api/v1/scans";
-        if (mode === "single") {
-          const id = document.getElementById("scan_id").value;
-          if (!id) {
-            alert("Please enter a Scan ID");
+        const table = document.getElementById("fetch_table").value;
+        const url = `/api/v1/${table}`;
+        await performRequest(url, "GET", null, "fetch-status");
+      }
+
+      async function sendConfig() {
+        const tempVal = document.getElementById("config_temperature").value;
+        const humVal = document.getElementById("config_humidity").value;
+        const presVal = document.getElementById("config_pressure").value;
+        
+        const data = {};
+        if (tempVal !== "") data.temperature = parseFloat(tempVal);
+        if (humVal !== "") data.humidity = parseFloat(humVal);
+        if (presVal !== "") data.pressure = parseFloat(presVal);
+
+        if (Object.keys(data).length === 0) {
+            alert("Please fill at least one configuration value");
             return;
-          }
-          url += `/${id}`;
         }
 
-        await performRequest(url, "GET", null, "fetch-status");
+        await performRequest("/api/v1/system_config", "POST", data, "config-status");
       }
 
       async function performRequest(url, method, body, statusId) {
@@ -318,8 +415,18 @@
         const req_api_key = document.getElementById("api_key").value;
 
         resBox.style.display = "block";
-        resBox.innerText = "Processing...";
         resBox.style.color = "#94a3b8";
+
+        // --- Build the debug output: always show what we are SENDING ---
+        let debugLines = [];
+        debugLines.push(`📤 REQUEST`);
+        debugLines.push(`   ${method} ${url}`);
+        if (body) {
+          debugLines.push(`   Payload: ${JSON.stringify(body, null, 2).replace(/\n/g, '\n   ')}`);
+        }
+        debugLines.push(``);
+        debugLines.push(`⏳ Sending...`);
+        resBox.innerText = debugLines.join('\n');
 
         try {
           const options = {
@@ -332,20 +439,60 @@
           if (body) options.body = JSON.stringify(body);
 
           const response = await fetch(url, options);
-          const result = await response.json();
+          const rawText = await response.text();
 
-          resBox.innerText = JSON.stringify(result, null, 2);
+          // Try to parse as JSON, fall back to raw text
+          let result;
+          let isJson = false;
+          try {
+            result = JSON.parse(rawText);
+            isJson = true;
+          } catch {
+            result = rawText;
+          }
+
+          // --- Build full debug output ---
+          debugLines = [];
+          debugLines.push(`📤 SENT`);
+          debugLines.push(`   ${method} ${url}`);
+          if (body) {
+            debugLines.push(`   ${JSON.stringify(body, null, 2).replace(/\n/g, '\n   ')}`);
+          }
+          debugLines.push(``);
+          debugLines.push(`📥 RESPONSE  [HTTP ${response.status} ${response.statusText}]`);
+          debugLines.push(isJson 
+            ? `   ${JSON.stringify(result, null, 2).replace(/\n/g, '\n   ')}`
+            : `   ⚠️  Server returned plain text (not JSON):\n   "${result.substring(0, 300)}"`
+          );
+
+          resBox.innerText = debugLines.join('\n');
 
           if (response.ok) {
+            resBox.style.color = "#4ade80";
+
+            if (statusId === "config-status") {
+              const ok = isJson && result.esp32_status === "ESP32 received";
+              status.innerText = ok ? "✅ ESP32 received" : "❌ ESP32 did not acknowledge";
+              status.style.color = ok ? "#4ade80" : "#ef4444";
+            } else if (statusId === "publish-status") {
+              status.innerText = "✅ Record saved!";
+              status.style.color = "#4ade80";
+            } else if (statusId === "fetch-status") {
+              status.innerText = "✅ Data retrieved!";
+              status.style.color = "#4ade80";
+            }
             status.style.display = "block";
             setTimeout(() => (status.style.display = "none"), 3000);
-            resBox.style.color = "#4ade80";
           } else {
             resBox.style.color = "#ef4444";
+            status.innerText = `❌ HTTP ${response.status}: ${response.statusText}`;
+            status.style.color = "#ef4444";
+            status.style.display = "block";
+            setTimeout(() => (status.style.display = "none"), 5000);
           }
         } catch (err) {
-          resBox.innerText = "Error: " + err.message;
           resBox.style.color = "#ef4444";
+          resBox.innerText = debugLines.join('\n') + `\n\n❌ NETWORK ERROR\n   ${err.message}`;
         }
       }
     </script>

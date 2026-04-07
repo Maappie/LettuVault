@@ -54,8 +54,8 @@ Stability Reached: 3000/3000ms. Data Sent!
 
 | Topic | Publisher | Subscriber | Stored In |
 |---|---|---|---|
-| `lettuvault/ai` | AI Camera (`predict.py`) | `mqtt_service.py` | `ai_scans` table |
-| `lettuvault/sensors` | ESP32 Hardware | `mqtt_service.py` | `sensor_readings` table |
+| `lettuvault/ai` | AI Camera (`predict.py`) | `mqtt/client.py` | `ai_scans` table |
+| `lettuvault/sensors` | ESP32 Hardware | `mqtt/client.py` | `sensor_readings` table |
 
 ---
 

@@ -26,7 +26,7 @@ CAMERA_HEIGHT = 480
 #   0.2 = Lenient: detects even uncertain objects (good for dim lighting)
 #   0.5 = Balanced: recommended for controlled environments
 #   0.7 = Strict: only reports high-confidence detections
-CONFIDENCE_THRESHOLD = 0.2
+CONFIDENCE_THRESHOLD = 0.6
 
 # Path to the custom YOLO model weights.
 # Leave as None to use auto-detection (looks for best.pt in runs/).
@@ -45,7 +45,10 @@ STABILITY_SECONDS = 3.0
 
 # Grace period (in seconds): if the object disappears briefly
 # within this window, the timer does NOT reset.
-GRACE_PERIOD_SECONDS = 0.6
+GRACE_PERIOD_SECONDS = 0.8
+
+# Target AI processing frames per second. Lower values save CPU on the Pi.
+TARGET_FPS = 2
 
 # How often to print the stability timer to the log (in seconds).
 # Lower = more frequent updates. Higher = less spam.
@@ -64,7 +67,7 @@ MQTT_PORT_OVERRIDE   = None  # e.g., 1883 or None (use .env)
 # ----------------------------
 
 # Show the annotated camera window with bounding boxes
-SHOW_CAMERA_WINDOW = True
+SHOW_CAMERA_WINDOW = False
 
 # Window title
 CAMERA_WINDOW_TITLE = "LettuVault Live AI Detection"

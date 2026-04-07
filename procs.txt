@@ -1,0 +1,9 @@
+C:\Users\Renz\AppData\Local\Programs\Python\Python310\python.exe -m lettu_backend.services.mqtt
+C:\Users\Renz\.platformio\penv\Scripts\python.exe -m platformio -c vscode home --port 45152 --host 127.0.0.1 --session-id b2d02ef311af48dcb2173f5a19cfff045bdefb3f --shutdown-timeout 3600 --no-open
+C:\Users\Renz\LettuVault\.venv\Scripts\python.exe -m lettu_backend.services.mqtt
+C:\Users\Renz\LettuVault\.venv\Scripts\python.exe -m lettu_backend.services.broker_service
+C:\Users\Renz\AppData\Local\Programs\Python\Python310\python.exe -m lettu_backend.services.broker_service
+c:\Users\Renz\.antigravity\extensions\ms-python.vscode-python-envs-1.20.1-win32-x64\python-env-tools\bin\pet.exe server
+C:\Users\Renz\.platformio\python3\python.exe -m platformio -c vscode home --port 45152 --host 127.0.0.1 --session-id b2d02ef311af48dcb2173f5a19cfff045bdefb3f --shutdown-timeout 3600 --no-open
+C:\Users\Renz\LettuVault\.venv\Scripts\python.exe -c import psutil; open('procs.txt','w').write('\n'.join(' '.join(p) for p in [p.cmdline() for p in psutil.process_iter(['cmdline']) if p.info['cmdline'] and 'python' in p.info['cmdline'][0]] if p))
+C:\Users\Renz\AppData\Local\Programs\Python\Python310\python.exe -c import psutil; open('procs.txt','w').write('\n'.join(' '.join(p) for p in [p.cmdline() for p in psutil.process_iter(['cmdline']) if p.info['cmdline'] and 'python' in p.info['cmdline'][0]] if p))

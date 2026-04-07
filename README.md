@@ -21,6 +21,9 @@ LettuVault/                     <-- Root Folder (The Workspace)
 ├── backend/                    <-- Web Server (Package: lettu_backend)
 │   └── src/lettu_backend/
 │       ├── main.py             <-- FastAPI entry + run_system() launcher
+│       ├── api/
+│       │   └── v1/
+│       │       └── endpoints.py <-- MAIN: REST API Routes (CRUD logic)
 │       ├── core/
 │       │   ├── config.py       <-- Reads from .env (MQTT, DB, API Keys)
 │       │   └── security.py     <-- API Key & JWT auth
@@ -28,11 +31,13 @@ LettuVault/                     <-- Root Folder (The Workspace)
 │       │   ├── database.py     <-- SQLAlchemy: ai_scans + sensor_readings
 │       │   └── domain.py       <-- Pydantic: Request/Response schemas
 │       ├── services/
-│       │   ├── broker_service.py   <-- Local MQTT Broker (127.0.0.1:1883)
-│       │   ├── mqtt_service.py     <-- MQTT Subscriber (routes data to DB)
-│       │   └── log_hub.py          <-- VS Code TUI (j/k log switcher)
+│       │   ├── broker_service.py   # Local MQTT Broker (127.0.0.1:1883)
+│       │   ├── mqtt/               # Modular MQTT Subsystem (Subscribers)
+│       │   └── log_hub.py          # VS Code TUI (j/k log switcher)
 │       ├── repository/
 │       │   └── scan_repo.py    <-- DataRepository (ai_scans + sensor_readings CRUD)
+│       ├── schemas/
+│       │   └── __init__.py     <-- Input validators (Pydantic, equiv. of Zod schemas)
 │       └── templates/
 │           ├── dashboard.html  <-- Live data dashboard (4 panels)
 │           └── simulator.html  <-- Hardware simulator
@@ -60,7 +65,7 @@ LettuVault/                     <-- Root Folder (The Workspace)
     │                                                       │
     ├── starts (after 4s) ──► [main.py / uvicorn]          │ (message hub)
     │                          FastAPI @ :8000              │
-    │                          + mqtt_service.py ◄──────────┤ (subscribes)
+    │                          + mqtt module ◄──────────────┤ (subscribes)
     │                            ├── lettuvault/ai          │
     │                            └── lettuvault/sensors     │
     │                                                       │
@@ -100,6 +105,21 @@ This opens a **TUI** in your VS Code terminal with 4 tabs:
 - **AI** (Magenta): Camera + YOLO detections with 3s stability check
 
 **Controls**: `j` (next tab) | `k` (prev tab) | `q` (quit all)
+
+---
+
+## 🛡️ Validation & Contracts (Schemas)
+
+The system uses **Pydantic Schemas** (located in `backend/src/lettu_backend/schemas/`) as a strict validation layer for all inbound data. This is equivalent to Zod in the Next.js ecosystem.
+
+| Schema | Validations |
+|---|---|
+| **Sensor Data** | Temperature (-20 to 80°C), Humidity (0-100%), Pressure (800-1200 hPa). |
+| **Produce Type** | Strict Allowlist: `Lettuce`, `Strawberry`, `Empty / Unknown`, `Camera Test`. |
+| **System Config** | Sane setpoint guards to prevent hardware damage from extreme temperature/humidity requests. |
+| **Security** | Sanitizes strings to prevent XSS (Script Injection) and SQL Injection patterns. |
+
+Inbound requests that fail these rules are automatically rejected by FastAPI with a `422 Unprocessable Entity` error before they reach the database.
 
 ---
 
