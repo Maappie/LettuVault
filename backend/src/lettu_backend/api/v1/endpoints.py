@@ -53,10 +53,13 @@ def create_ai_scan(scan_in: dict, db: Session = Depends(get_db)):
         if produce_type in PRODUCE_CONFIGS:
             config_data = PRODUCE_CONFIGS[produce_type].copy()
             
-            from lettu_backend.services.mqtt import mqtt_service
-            success = mqtt_service.send_config_with_ack(config_data.copy(), max_retries=1, timeout=2.0)
-            
-            if success:
+            if settings.REQUIRE_ESP32_ACK:
+                from lettu_backend.services.mqtt import mqtt_service
+                success = mqtt_service.send_config_with_ack(config_data.copy(), max_retries=1, timeout=2.0)
+                if success:
+                    repo.create_system_config(config_data)
+            else:
+                # Bypass ACK — save directly (no ESP32 connected)
                 repo.create_system_config(config_data)
 
         return response
@@ -87,12 +90,14 @@ def get_system_configs(db: Session = Depends(get_db)):
 def create_system_config(config_in: SystemConfigCreateSchema, db: Session = Depends(get_db)):
     repo = DataRepository(db)
     
-    from lettu_backend.services.mqtt import mqtt_service
-    
     # Forward the provided settings to the ESP32 via MQTT with ACK
     payload = {k: v for k, v in config_in.model_dump().items() if v is not None}
     
-    if payload:
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty configuration payload")
+    
+    if settings.REQUIRE_ESP32_ACK:
+        from lettu_backend.services.mqtt import mqtt_service
         success = mqtt_service.send_config_with_ack(payload, max_retries=3, timeout=3.0)
         if not success:
             raise HTTPException(
@@ -101,7 +106,8 @@ def create_system_config(config_in: SystemConfigCreateSchema, db: Session = Depe
             )
         esp32_status = "ESP32 received"
     else:
-        raise HTTPException(status_code=400, detail="Empty configuration payload")
+        # Bypass ACK — save directly (no ESP32 connected)
+        esp32_status = "Saved (ACK bypassed — no hardware)"
         
     db_result = repo.create_system_config(config_in.model_dump())
     
@@ -114,13 +120,6 @@ def create_system_config(config_in: SystemConfigCreateSchema, db: Session = Depe
         "pressure": db_result.pressure,
         "esp32_status": esp32_status
     }
-
-@router.post("/trigger-produce-scan", dependencies=[Depends(get_current_active_device)])
-def trigger_produce_scan():
-    from lettu_backend.services.mqtt_service import mqtt_service
-    # Send a command to the AI system to do a one-time check for Lettuce/Strawberry
-    mqtt_service.send_command("TRIGGER_PRODUCE_SCAN")
-    return {"status": "Command sent"}
 
 # --- 🌡️ INTERNAL ENVIRONMENT ENDPOINTS ---
 @router.get("/internal-environment", response_model=list[InternalEnvironmentReadingResponse], dependencies=[Depends(get_current_active_device)])

@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # 🔄 Loopback
     API_LOOPBACK_URL: str = os.getenv("API_LOOPBACK_URL", "http://localhost:8000")
 
+    # 🔧 Hardware Confirmation
+    # When True, system config changes require ESP32 ACK before saving to DB.
+    # Set to False to bypass for development without hardware.
+    REQUIRE_ESP32_ACK: bool = os.getenv("REQUIRE_ESP32_ACK", "true").lower() == "true"
+
     class Config:
         case_sensitive = True
 

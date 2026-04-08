@@ -67,7 +67,7 @@ MQTT_PORT_OVERRIDE   = None  # e.g., 1883 or None (use .env)
 # ----------------------------
 
 # Show the annotated camera window with bounding boxes
-SHOW_CAMERA_WINDOW = True
+SHOW_CAMERA_WINDOW = False
 
 # Window title
 CAMERA_WINDOW_TITLE = "LettuVault Live AI Detection"
