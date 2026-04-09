@@ -34,7 +34,7 @@ python_exe = venv_python if os.path.exists(venv_python) else sys.executable
 def sweep_zombies():
     """Aggressively kills any existing LettuVault processes before starting, excluding current PID."""
     my_pid = os.getpid()
-    keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service"]
+    keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service", "sync_engine"]
     print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
     
     try:
@@ -101,6 +101,11 @@ class LogHub:
             "color": "magenta",
             "desc": "AI Detector"
         },
+        "SYNC": {
+            "cmd": [python_exe, os.path.join(PROJECT_ROOT, "sync_engine.py")],
+            "color": "dark_orange",
+            "desc": "Cloud Sync Bridge"
+        },
         "MOBILE_APP": {
             "cmd": ["flutter", "run"],
             "color": "blue",
@@ -111,7 +116,7 @@ class LogHub:
     def __init__(self, include_mobile=False):
         self.include_mobile = include_mobile
         # Define the basic service set
-        active_services = ["BROKER", "API SERVER", "SUBSCRIBERS", "PUBLISHERS"]
+        active_services = ["BROKER", "API SERVER", "SUBSCRIBERS", "PUBLISHERS", "SYNC"]
         if self.include_mobile:
             active_services.append("MOBILE_APP")
             
@@ -136,10 +141,11 @@ class LogHub:
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONPATH"] = os.path.abspath(os.curdir) + os.pathsep + env.get("PYTHONPATH", "")
 
-        # Special case for mobile: must run inside the mobile subdirectory
+        # Initial directory is the project root
         cwd = os.path.abspath(os.curdir)
+        
+        # Override working directories for specific services
         if name == "MOBILE_APP":
-            # Attempt to locate the mobile directory
             potential_path = os.path.join(cwd, "mobile", "LettuVault_Unfinished")
             if os.path.exists(potential_path):
                 cwd = potential_path
@@ -262,7 +268,7 @@ class LogHub:
         threading.Thread(target=self.capture_logs, args=("BROKER",), daemon=True).start()
         time.sleep(1) 
         
-        other_services = ["API SERVER", "SUBSCRIBERS", "PUBLISHERS"]
+        other_services = ["API SERVER", "SUBSCRIBERS", "PUBLISHERS", "SYNC"]
         if self.include_mobile:
             other_services.append("MOBILE_APP")
 

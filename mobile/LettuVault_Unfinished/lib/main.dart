@@ -13,7 +13,13 @@ import 'src/screens/home_screen.dart';
 import 'src/screens/detail_screen.dart';
 import 'src/screens/log_status_screen.dart';
 import 'src/widgets/helpers.dart';
-import 'src/integration/sensor_network_adapter.dart';
+import 'src/repositories/environment_repository.dart';
+import 'src/repositories/config_repository.dart';
+import 'src/core/constants.dart';
+import 'src/services/background_service.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:auto_start_flutter/auto_start_flutter.dart';
 
 final FlutterLocalNotificationsPlugin localNotif =
     FlutterLocalNotificationsPlugin();
@@ -21,7 +27,15 @@ final FlutterLocalNotificationsPlugin localNotif =
 // Global theme notifier so screens can toggle theme at runtime
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Best-effort background service — if the plugin fails (e.g. hot restart,
+  // older device), the app still launches and runs normally.
+  try {
+    await initBackgroundService();
+  } catch (e) {
+    debugPrint('[BG] Background service init failed (non-fatal): $e');
+  }
   runApp(
     ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
@@ -68,9 +82,8 @@ class MainNavigationContainer extends StatefulWidget {
 
 class _MainNavigationContainerState extends State<MainNavigationContainer> {
   int _selectedIndex = 0;
-  bool _tempAlertSent = false;
-  bool _humidityAlertSent = false;
-  bool _pressureAlertSent = false;
+  // Zone tracking: 0=green 1=orange 2=red — only notify on transitions
+  final Map<String, int> _lastZone = {'temp': 0, 'hum': 0, 'pres': 0};
   bool _alertsEnabled = true;
 
   // UI theme state
@@ -90,21 +103,32 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
   List<SensorReading> humidityHistory = [];
   List<SensorReading> pressureHistory = [];
 
-  // Current computed Vapor Pressure Deficit
-  double currentVPD = 0.0;
-
   // NOTE: use the _Low/_High threshold pairs above for alerts and UI sliders
-  double updateInterval = 5.0;
-  double simulationAmplitude = 2.1;
+  bool _useDefaultThresholds = true;
 
-  // When true the timer will modify sensor values with simulated noise.
-  // Set to false to feed real sensor data via `injectSensorReadings(...)`.
-  bool _simulateSensors = true; 
+  // Staging variables — used as temp state while editing custom alert thresholds.
+  // Only applied to the real threshold variables when the user taps "Save".
+  double _draftTempLow = 18.0;
+  double _draftTempHigh = 28.0;
+  double _draftHumLow = 40.0;
+  double _draftHumHigh = 80.0;
+  double _draftPresLow = 950.0;
+  double _draftPresHigh = 1050.0;
+  String? _thresholdError;
 
-  // Network adapter (optional) — polls an external API and injects readings
-  SensorNetworkAdapter? _networkAdapter;
-  bool _adapterRunning = false;
-  String _adapterUrl = 'http://10.0.2.2:5000/sensor';
+  // --- System Config (UI-only target setpoints chosen by the user) ---
+  String _selectedPreset = 'Custom';
+  double _sysConfigTemp = 25.0;
+  double _sysConfigHum = 60.0;
+  double _sysConfigPres = 1013.0;
+  bool _showSysConfig = false; // collapsed by default
+
+  // --- Real API polling ---
+  final EnvironmentRepository _envRepo = EnvironmentRepository();
+  final ConfigRepository _configRepo = ConfigRepository();
+  Timer? _apiPollTimer;
+  bool _apiPollingEnabled = false;
+  String? _apiError;  // null = no error, otherwise the error message
 
   List<SensorReading> tempBuffer = [];
   List<SensorReading> humidityBuffer = [];
@@ -112,6 +136,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
 
   double currentTemp = 25.0, currentHum = 60.0, currentPres = 1013.0;
   double avgT = 25.0, avgH = 60.0, avgP = 1013.0;
+  
+  // Target Setpoints (from system_config)
+  double targetTemp = 25.0, targetHum = 60.0, targetPres = 1013.0;
+  
   Timer? _timer;
 
   @override
@@ -131,14 +159,79 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     await _loadSavedThresholds();
     await _loadSavedTheme();
 
-    // start the periodic timer after initial state is restored
-    _startTimer();
+    // Start real API polling (runs alongside the background service)
+    _startApiPolling();
+
+    // Subscribe to readings pushed by the background isolate (best-effort)
+    try {
+      FlutterBackgroundService().on('sensorReading').listen((data) {
+        if (data == null || !mounted) return;
+        injectSensorReadings(
+          temp: (data['temperature'] as num?)?.toDouble(),
+          hum:  (data['humidity']   as num?)?.toDouble(),
+          pres: (data['pressure']   as num?)?.toDouble(),
+        );
+      });
+    } catch (e) {
+      debugPrint('[BG] Could not subscribe to background readings: $e');
+    }
 
     // keep the splash visible for a short, pleasant duration
     await Future.delayed(const Duration(milliseconds: 600));
 
     if (!mounted) return;
     setState(() => _isLoading = false);
+
+    // Automatically detect and pop up the "Auto Start" settings screen on
+    // Chinese ROMs (like TECNO's HiOS, Xiaomi MIUI, etc.) if it is available.
+    try {
+      final available = await isAutoStartAvailable;
+      if (available == true) {
+        final prefs = await SharedPreferences.getInstance();
+        final bool autoStartPrompted = prefs.getBool('autoStartPrompted') ?? false;
+        
+        // Temporarily ignore the saved flag so the user can see the new instructions,
+        // unless they literally just did it. For production this would stay true.
+        // I will set it to false so it pops up for the user now.
+        if (!autoStartPrompted || prefs.getBool('v2Prompt') != true) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('Keep Alerts Running'),
+              content: const Text(
+                'To ensure you receive critical alerts when LettuVault is closed:\n\n'
+                '1. We will open your "App Launch" settings.\n'
+                '2. Find LettuVault in the list and turn it ON (Allowed).\n'
+                '3. Do NOT tap the "Intelligent Optimization" button at the bottom.\n\n'
+                'Then press your phone\'s Back button to return here.',
+                style: TextStyle(height: 1.5),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Skip'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await getAutoStartPermission();
+                  },
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          await prefs.setBool('autoStartPrompted', true);
+          await prefs.setBool('v2Prompt', true);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AutoStart] error: $e');
+    }
   }
 
   // --- Persistence for thresholds using shared_preferences
@@ -146,6 +239,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
+        _useDefaultThresholds = prefs.getBool('useDefaultThresholds') ?? true;
         tempThresholdLow = prefs.getDouble('tempThresholdLow') ?? tempThresholdLow;
         tempThresholdHigh = prefs.getDouble('tempThresholdHigh') ?? tempThresholdHigh;
         humidityThresholdLow = prefs.getDouble('humidityThresholdLow') ?? humidityThresholdLow;
@@ -188,11 +282,178 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     }
   }
 
+  Future<void> _saveBool(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (e) {
+      debugPrint('Prefs save error: $e');
+    }
+  }
+
   @override
   void dispose() {
-    _networkAdapter?.stop();
     _timer?.cancel();
+    _apiPollTimer?.cancel();
     super.dispose();
+  }
+
+  // --- Real API Polling ---
+  void _startApiPolling() {
+    _apiPollTimer?.cancel();
+    _apiPollingEnabled = true;
+    // Initial fetch immediately
+    _fetchLatestFromApi();
+    // Then poll on interval
+    _apiPollTimer = Timer.periodic(
+      Duration(seconds: kDashboardPollIntervalSeconds),
+      (_) => _fetchLatestFromApi(),
+    );
+  }
+
+
+  Future<void> _fetchLatestFromApi() async {
+    if (!_apiPollingEnabled) return;
+    try {
+      final reading = await _envRepo.getLatest();
+      final config = await _configRepo.getLatest();
+      
+      if (config != null) {
+        setState(() {
+          targetTemp = config.temperature ?? targetTemp;
+          targetHum = config.humidity ?? targetHum;
+          targetPres = config.pressure ?? targetPres;
+          
+          if (_useDefaultThresholds) {
+            // Dynamically center the critical safety boundaries around our true target
+            tempThresholdLow = targetTemp - kTempMaxDeviation;
+            tempThresholdHigh = targetTemp + kTempMaxDeviation;
+            
+            humidityThresholdLow = targetHum - kHumMaxDeviation;
+            humidityThresholdHigh = targetHum + kHumMaxDeviation;
+            
+            pressureThresholdLow = targetPres - kPresMaxDeviation;
+            pressureThresholdHigh = targetPres + kPresMaxDeviation;
+          }
+        });
+      }
+
+      if (reading == null) {
+        setState(() => _apiError = null); // no data yet, not an error
+        return;
+      }
+      
+      // Inject the real values into the existing system
+      injectSensorReadings(
+        temp: reading.temperature,
+        hum: reading.humidity,
+        pres: reading.pressure,
+      );
+
+      // ── Zone notifications ────────────────────────────────────────────────
+      // This runs in the main isolate (always alive when app is backgrounded).
+      // Uses the same target / threshold state already loaded for the gauges.
+      if (_alertsEnabled) {
+        _checkAndNotifyZone(
+          key: 'temp', sensorName: 'Temperature',
+          readingStr: '${reading.temperature?.toStringAsFixed(1)}°C',
+          notifId: 901,
+          value: reading.temperature ?? 0,
+          target: targetTemp,
+          tolerance: kTempTolerance, maxDev: kTempMaxDeviation,
+          customLow: tempThresholdLow, customHigh: tempThresholdHigh,
+        );
+        _checkAndNotifyZone(
+          key: 'hum', sensorName: 'Humidity',
+          readingStr: '${reading.humidity?.toStringAsFixed(0)}%',
+          notifId: 902,
+          value: reading.humidity ?? 0,
+          target: targetHum,
+          tolerance: kHumTolerance, maxDev: kHumMaxDeviation,
+          customLow: humidityThresholdLow, customHigh: humidityThresholdHigh,
+        );
+        _checkAndNotifyZone(
+          key: 'pres', sensorName: 'Pressure',
+          readingStr: '${reading.pressure?.toStringAsFixed(0)} hPa',
+          notifId: 903,
+          value: reading.pressure ?? 0,
+          target: targetPres,
+          tolerance: kPresTolerance, maxDev: kPresMaxDeviation,
+          customLow: pressureThresholdLow, customHigh: pressureThresholdHigh,
+        );
+      }
+
+      if (mounted) setState(() => _apiError = null);
+    } catch (e) {
+      debugPrint('API poll error: $e');
+      if (mounted) setState(() => _apiError = e.toString());
+    }
+  }
+
+  /// Computes the zone (0=green,1=orange,2=red) for [value] and fires a
+  /// notification only when the zone transitions. Cancels the notification
+  /// when returning to green.
+  void _checkAndNotifyZone({
+    required String key,
+    required String sensorName,
+    required String readingStr,
+    required int    notifId,
+    required double value,
+    required double target,
+    required double tolerance,
+    required double maxDev,
+    required double customLow,
+    required double customHigh,
+  }) {
+    // Compute zone using same logic as the gauge
+    int zone;
+    if (_useDefaultThresholds) {
+      final diff = (value - target).abs();
+      if (diff <= tolerance)   zone = 0; // green
+      else if (diff <= maxDev) zone = 1; // orange
+      else                     zone = 2; // red
+    } else {
+      if (value < customLow || value > customHigh) {
+        zone = 2; // red — outside hard bounds
+      } else if ((value - target).abs() <= tolerance) {
+        zone = 0; // green
+      } else {
+        zone = 1; // orange
+      }
+    }
+
+    final prev = _lastZone[key] ?? 0;
+    if (zone == prev) return; // no change — don't spam
+    _lastZone[key] = zone;
+
+    if (zone == 0) {
+      // Returned to green — cancel the alert silently
+      localNotif.cancel(id: notifId);
+      return;
+    }
+
+    final bool isRed = zone == 2;
+    localNotif.show(
+      id:    notifId,
+      title: isRed
+          ? 'LettuVault Alert 🔴 — Red Zone'
+          : 'LettuVault Warning 🟠 — Orange Zone',
+      body: isRed
+          ? '$sensorName ($readingStr) has entered the Red Zone. Please check the LettuVault immediately!'
+          : '$sensorName ($readingStr) is in the Orange Zone. LettuVault is outside the safe range.',
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          isRed ? 'lettuvault_red_alerts' : 'lettuvault_orange_alerts',
+          isRed ? 'LettuVault Critical Alerts' : 'LettuVault Warnings',
+          importance: isRed ? Importance.max  : Importance.high,
+          priority:   isRed ? Priority.max    : Priority.high,
+          ongoing:        isRed,
+          autoCancel:     !isRed,
+          playSound:      true,
+          enableVibration: true,
+        ),
+      ),
+    );
   }
 
   Future<void> _initializeNotifications() async {
@@ -217,25 +478,24 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       onDidReceiveNotificationResponse: null,
     );
 
-    // Android 13+ POST_NOTIFICATIONS is declared in the manifest; if your
-    // device still blocks notifications you will need to grant the runtime
-    // permission from system settings or add a runtime-permission flow
-    // (e.g. using permission_handler) — keeping this simple for now.
-    debugPrint('Notifications initialized (check device permissions if blocked)');
-  }
+    // Explicitly request Android 13+ POST_NOTIFICATIONS runtime permission.
+    // If we don't ask, notifications will be silently blocked by the OS.
+    final androidImplementation = localNotif.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidImplementation?.requestNotificationsPermission();
 
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(
-      Duration(milliseconds: (updateInterval * 1000).toInt()),
-      (t) => _processSensorData(),
-    );
+    // Ask the user to disable battery optimizations for LettuVault so the OS doesn't
+    // brutally kill the background service when the app is swiped away.
+    if (await Permission.ignoreBatteryOptimizations.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+
+    debugPrint('Notifications initialized (permissions requested)');
   }
 
   Future<Directory?> _getStorageDirectory() async {
     try {
       if (Platform.isAndroid) return await getExternalStorageDirectory();
-      // For iOS and desktop fall back to application documents directory
       return await getApplicationDocumentsDirectory();
     } catch (e) {
       debugPrint('Storage unavailable: $e');
@@ -248,8 +508,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       final directory = await _getStorageDirectory();
       if (directory == null) return;
       final file = File('${directory.path}/sensor_log.csv');
-      String timestamp =
-          DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+      final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
       await file.writeAsString(
         '$timestamp, $sensor, ${value.toStringAsFixed(2)}\n',
         mode: FileMode.append,
@@ -259,93 +518,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     }
   }
 
-  void _processSensorData() {
-    // If simulation is disabled the timer does nothing; external code should
-    // call `injectSensorReadings` to feed real sensor values.
-    if (!_simulateSensors) return;
-
-    setState(() {
-      currentTemp += (Random().nextDouble() - 0.5) * simulationAmplitude;
-      currentHum += (Random().nextDouble() - 0.5) * simulationAmplitude;
-      currentPres += (Random().nextDouble() - 0.5) * simulationAmplitude;
-
-      // update live buffers (last 5)
-      avgT = _updateBuffer(tempBuffer, currentTemp);
-      avgH = _updateBuffer(humidityBuffer, currentHum);
-      avgP = _updateBuffer(pressureBuffer, currentPres);
-
-      // update history buffers (last 30)
-      _updateHistory(tempHistory, currentTemp);
-      _updateHistory(humidityHistory, currentHum);
-      _updateHistory(pressureHistory, currentPres);
-
-      // compute current VPD
-      currentVPD = _computeVPD(currentTemp, currentHum);
-
-      _logToCSV("Temperature", currentTemp);
-      _logToCSV("Humidity", currentHum);
-      _logToCSV("Pressure", currentPres);
-
-      if (_alertsEnabled) {
-        _checkAlerts();
-      }
-    });
-  }
-
   void _updateHistory(List<SensorReading> hist, double val, {int maxLen = 30}) {
     hist.add(SensorReading(val, DateTime.now()));
     if (hist.length > maxLen) hist.removeAt(0);
-  }
-
-  double _computeVPD(double tempC, double rhPercent) {
-    // es(T) = 0.61078 * exp((17.27 * T) / (T + 237.3))
-    final es = 0.61078 * exp((17.27 * tempC) / (tempC + 237.3));
-    final vpd = es * (1 - (rhPercent / 100.0));
-    return double.parse(vpd.toStringAsFixed(3));
-  }
-
-  void _checkAlerts() {
-    // Temperature Alert (high/low)
-    if ((currentTemp > tempThresholdHigh || currentTemp < tempThresholdLow) && !_tempAlertSent) {
-      String direction = currentTemp > tempThresholdHigh ? "High" : "Low";
-      _showThresholdAlert("$direction Temperature: ${currentTemp.toStringAsFixed(1)}°C");
-      _tempAlertSent = true;
-    } else if (currentTemp <= tempThresholdHigh - 1.0 && currentTemp >= tempThresholdLow + 1.0) {
-      _tempAlertSent = false;
-    }
-
-    // Humidity Alert (low/high)
-    if ((currentHum > humidityThresholdHigh || currentHum < humidityThresholdLow) && !_humidityAlertSent) {
-      String direction = currentHum > humidityThresholdHigh ? "High" : "Low";
-      _showThresholdAlert("$direction Humidity: ${currentHum.toStringAsFixed(1)}%");
-      _humidityAlertSent = true;
-    } else if (currentHum <= humidityThresholdHigh - 1.0 && currentHum >= humidityThresholdLow + 1.0) {
-      _humidityAlertSent = false;
-    }
-
-    // Pressure Alert (high/low)
-    if ((currentPres > pressureThresholdHigh || currentPres < pressureThresholdLow) && !_pressureAlertSent) {
-      String direction = currentPres > pressureThresholdHigh ? "High" : "Low";
-      _showThresholdAlert("$direction Pressure: ${currentPres.toStringAsFixed(1)} hPa");
-      _pressureAlertSent = true;
-    } else if (currentPres <= pressureThresholdHigh - 1.0 && currentPres >= pressureThresholdLow + 1.0) {
-      _pressureAlertSent = false;
-    }
-  }
-
-  Future<void> _showThresholdAlert(String body) async {
-    const androidDetails = AndroidNotificationDetails(
-      'critical_alerts',
-      'Sensor Alerts',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-    await localNotif.show(
-      id: Random().nextInt(1000),
-      title: 'LettuVault Warning',
-      body: body,
-      notificationDetails: const NotificationDetails(android: androidDetails),
-    );
   }
 
   double _updateBuffer(List<SensorReading> buffer, double val) {
@@ -378,41 +553,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         _updateHistory(pressureHistory, currentPres);
         _logToCSV("Pressure", currentPres);
       }
-
-      // recompute derived metric
-      currentVPD = _computeVPD(currentTemp, currentHum);
-
-      if (_alertsEnabled) _checkAlerts();
     });
   }
 
-  void setSimulationEnabled(bool enabled) => setState(() => _simulateSensors = enabled);
-
-  void _startNetworkAdapter() {
-    // create adapter (uses current updateInterval as default polling interval)
-    _networkAdapter?.stop();
-    _networkAdapter = SensorNetworkAdapter(
-      url: _adapterUrl,
-      intervalSeconds: updateInterval.toInt().clamp(1, 60),
-      onData: (t, h, p) {
-        MainNavigationContainer.navKey.currentState?.injectSensorReadings(
-          temp: t,
-          hum: h,
-          pres: p,
-        );
-      },
-    );
-    _networkAdapter!.start();
-    setState(() {
-      _adapterRunning = true;
-      // disable simulation when external adapter is running
-      _simulateSensors = false;
-    });
-  }
-
-  void _stopNetworkAdapter() {
-    _networkAdapter?.stop();
-    setState(() => _adapterRunning = false);
+  double _calcDangerLevel(double current, double target, double tol, double maxDev) {
+    double diff = (current - target).abs();
+    if (diff <= tol) return 0.0;
+    if (diff >= maxDev) return 1.0;
+    return (diff - tol) / (maxDev - tol);
   }
 
   @override
@@ -422,18 +570,32 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         t: currentTemp,
         h: currentHum,
         p: currentPres,
-        at: avgT,
-        ah: avgH,
-        ap: avgP,
-        vpd: currentVPD,
-        // Trends (difference vs oldest sample in buffer)
-        trendT: tempBuffer.isNotEmpty ? (currentTemp - tempBuffer.first.value) : 0.0,
-        trendH: humidityBuffer.isNotEmpty ? (currentHum - humidityBuffer.first.value) : 0.0,
-        trendP: pressureBuffer.isNotEmpty ? (currentPres - pressureBuffer.first.value) : 0.0,
-        // pass critical flags so Home can color cards
-        isTempCritical: (currentTemp > tempThresholdHigh || currentTemp < tempThresholdLow),
-        isHumCritical: (currentHum > humidityThresholdHigh || currentHum < humidityThresholdLow),
-        isPresCritical: (currentPres > pressureThresholdHigh || currentPres < pressureThresholdLow),
+        targetT: targetTemp,
+        targetH: targetHum,
+        targetP: targetPres,
+        // Delta vs Target
+        trendT: currentTemp - targetTemp,
+        trendH: currentHum - targetHum,
+        trendP: currentPres - targetPres,
+        // Dynamic danger colors — use custom midpoint+halfrange when not default
+        tempDanger: _useDefaultThresholds
+            ? _calcDangerLevel(currentTemp, targetTemp, kTempTolerance, kTempMaxDeviation)
+            : _calcDangerLevel(currentTemp, (tempThresholdLow + tempThresholdHigh) / 2,
+                (tempThresholdHigh - tempThresholdLow) / 2,
+                ((tempThresholdHigh - tempThresholdLow) / 2) + ((tempThresholdHigh - tempThresholdLow) / 2 * 0.2).clamp(1.0, 20.0)),
+        humDanger: _useDefaultThresholds
+            ? _calcDangerLevel(currentHum, targetHum, kHumTolerance, kHumMaxDeviation)
+            : _calcDangerLevel(currentHum, (humidityThresholdLow + humidityThresholdHigh) / 2,
+                (humidityThresholdHigh - humidityThresholdLow) / 2,
+                ((humidityThresholdHigh - humidityThresholdLow) / 2) + ((humidityThresholdHigh - humidityThresholdLow) / 2 * 0.2).clamp(1.0, 20.0)),
+        presDanger: _useDefaultThresholds
+            ? _calcDangerLevel(currentPres, targetPres, kPresTolerance, kPresMaxDeviation)
+            : _calcDangerLevel(currentPres, (pressureThresholdLow + pressureThresholdHigh) / 2,
+                (pressureThresholdHigh - pressureThresholdLow) / 2,
+                ((pressureThresholdHigh - pressureThresholdLow) / 2) + ((pressureThresholdHigh - pressureThresholdLow) / 2 * 0.2).clamp(1.0, 20.0)),
+        // API status
+        apiError: _apiError,
+        apiPolling: _apiPollingEnabled,
       ),
       DetailScreen(
         title: "Temperature",
@@ -445,6 +607,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         color: Colors.redAccent,
         lowerThreshold: tempThresholdLow,
         upperThreshold: tempThresholdHigh,
+        target: targetTemp,
+        useDefaultThresholds: _useDefaultThresholds,
       ),
       DetailScreen(
         title: "Humidity",
@@ -457,6 +621,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         lowerThreshold: humidityThresholdLow,
         upperThreshold: humidityThresholdHigh,
         isLowCrit: true,
+        target: targetHum,
+        useDefaultThresholds: _useDefaultThresholds,
       ),
       DetailScreen(
         title: "Pressure",
@@ -468,6 +634,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         color: Colors.amber,
         lowerThreshold: pressureThresholdLow,
         upperThreshold: pressureThresholdHigh,
+        target: targetPres,
+        useDefaultThresholds: _useDefaultThresholds,
       ),
       const LogStatusScreen(),
     ];
@@ -535,83 +703,149 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
                         _buildAlertSwitch(),
                         _buildThemeSwitch(),
                         _buildClearLogsTile(context),
-                        buildSectionHeader("Simulation Control"),
-                _buildTimerSlider(),
-                _buildAmplitudeSlider(),
+                        buildSectionHeader("System Config"),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 40,
+                            child: OutlinedButton.icon(
+                              icon: Icon(_showSysConfig ? Icons.expand_less : Icons.settings,
+                                  size: 18, color: Theme.of(context).colorScheme.primary),
+                              label: Text(_showSysConfig ? 'Hide Settings' : 'Change Setting',
+                                  style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => setState(() => _showSysConfig = !_showSysConfig),
+                            ),
+                          ),
+                        ),
+                        if (_showSysConfig) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            child: Wrap(spacing: 8, runSpacing: 4, children: [
+                              _buildPresetChip('Lettuce', Icons.eco, Colors.green),
+                              _buildPresetChip('Strawberry', Icons.spa, Colors.red),
+                              _buildPresetChip('Custom', Icons.tune, Colors.blueAccent),
+                            ]),
+                          ),
+                          _buildSysConfigSlider("Target Temp", _sysConfigTemp, 0, 60, Colors.redAccent,
+                              (v) => setState(() { _sysConfigTemp = v; _selectedPreset = 'Custom'; })),
+                          _buildSysConfigSlider("Target Humid", _sysConfigHum, 50, 100, Colors.blueAccent,
+                              (v) => setState(() { _sysConfigHum = v; _selectedPreset = 'Custom'; })),
+                          _buildSysConfigSlider("Target Pres", _sysConfigPres, 800, 1100, Colors.amber,
+                              (v) => setState(() { _sysConfigPres = v; _selectedPreset = 'Custom'; })),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                            child: Text('\u26a0 System Config is UI-only. Backend changes not applied yet.',
+                              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                          ),
+                        ],
 
-                // Simulation toggle (expose the existing flag in the UI)
-                ListTile(
-                  leading: const Icon(Icons.play_arrow, color: Colors.greenAccent),
-                  title: Text("Enable Simulation", style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                  trailing: Switch(
-                    value: _simulateSensors,
-                    onChanged: (v) => setSimulationEnabled(v),
-                    activeColor: Colors.greenAccent,
-                  ),
-                ),
 
-                // External network adapter control
-                ListTile(
-                  leading: const Icon(Icons.cloud, color: Colors.blueAccent),
-                  title: Text("Network Adapter", style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                  subtitle: Text(
-                    _adapterRunning ? 'Running ($_adapterUrl)' : 'Stopped — default: http://10.0.2.2:5000/sensor',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
-                  ),
-                  trailing: Switch(
-                    value: _adapterRunning,
-                    onChanged: (v) {
-                      if (v) {
-                        _startNetworkAdapter();
-                      } else {
-                        _stopNetworkAdapter();
-                      }
-                    },
-                    activeColor: Colors.blueAccent,
-                  ),
-                ),
+                        Divider(color: Theme.of(context).dividerColor),
 
-                Divider(color: Theme.of(context).dividerColor),
-                buildSectionHeader("Alert Thresholds"),
+                        // ─── ALERT THRESHOLDS ────────────────────────────────
+                        // These bounds control when the mobile app sends you
+                        // a notification. They are independent of System Config.
+                        buildSectionHeader("Alert Thresholds"),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 6),
+                          child: Text(
+                            'Set the reading bounds that trigger a push notification. '
+                            'Independent of System Config.',
+                            style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.auto_awesome, color: Colors.blueAccent),
+                          title: Text("Auto-derive from Target", style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                          subtitle: Text(
+                            "Alert when reading exceeds target ± max deviation",
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 12),
+                          ),
+                          trailing: Switch(
+                            value: _useDefaultThresholds,
+                            onChanged: (v) {
+                              setState(() {
+                                _useDefaultThresholds = v;
+                                if (!v) {
+                                  _draftTempLow = tempThresholdLow;
+                                  _draftTempHigh = tempThresholdHigh;
+                                  _draftHumLow = humidityThresholdLow;
+                                  _draftHumHigh = humidityThresholdHigh;
+                                  _draftPresLow = pressureThresholdLow;
+                                  _draftPresHigh = pressureThresholdHigh;
+                                  _thresholdError = null;
+                                }
+                              });
+                              _saveBool('useDefaultThresholds', v);
+                              _fetchLatestFromApi();
+                            },
+                            activeColor: Colors.blueAccent,
+                          ),
+                        ),
 
-                // Temperature
-                _buildThresholdSlider("Temp (Low)", tempThresholdLow, -40, 40, Colors.red,
-                    (v) {
-                      setState(() => tempThresholdLow = v);
-                      _saveThreshold('tempThresholdLow', v);
-                    }),
-                _buildThresholdSlider("Temp (High)", tempThresholdHigh, -20, 60, Colors.red,
-                    (v) {
-                      setState(() => tempThresholdHigh = v);
-                      _saveThreshold('tempThresholdHigh', v);
-                    }),
+                        if (!_useDefaultThresholds) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                            child: Text(
+                              'Adjust then tap Save. Target must be inside your Low–High range.',
+                              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                            ),
+                          ),
+                          _buildThresholdSlider("Temp Low", _draftTempLow, -40, 60, Colors.redAccent,
+                              (v) => setState(() { _draftTempLow = v; _thresholdError = null; })),
+                          _buildThresholdSlider("Temp High", _draftTempHigh, -40, 60, Colors.redAccent,
+                              (v) => setState(() { _draftTempHigh = v; _thresholdError = null; })),
+                          _buildThresholdSlider("Humid Low", _draftHumLow, 0, 100, Colors.blueAccent,
+                              (v) => setState(() { _draftHumLow = v; _thresholdError = null; })),
+                          _buildThresholdSlider("Humid High", _draftHumHigh, 0, 100, Colors.blueAccent,
+                              (v) => setState(() { _draftHumHigh = v; _thresholdError = null; })),
+                          _buildThresholdSlider("Pres Low", _draftPresLow, 750, 1100, Colors.amber,
+                              (v) => setState(() { _draftPresLow = v; _thresholdError = null; })),
+                          _buildThresholdSlider("Pres High", _draftPresHigh, 750, 1100, Colors.amber,
+                              (v) => setState(() { _draftPresHigh = v; _thresholdError = null; })),
 
-                // Humidity
-                _buildThresholdSlider("Humid (Low)", humidityThresholdLow, 0, 100, Colors.blue,
-                    (v) {
-                      setState(() => humidityThresholdLow = v);
-                      _saveThreshold('humidityThresholdLow', v);
-                    }),
-                _buildThresholdSlider("Humid (High)", humidityThresholdHigh, 0, 100, Colors.blue,
-                    (v) {
-                      setState(() => humidityThresholdHigh = v);
-                      _saveThreshold('humidityThresholdHigh', v);
-                    }),
+                          if (_thresholdError != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                                ),
+                                child: Text(_thresholdError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                              ),
+                            ),
 
-                // Pressure
-                _buildThresholdSlider("Pres (Low)", pressureThresholdLow, 750, 1100, Colors.amber,
-                    (v) {
-                      setState(() => pressureThresholdLow = v);
-                      _saveThreshold('pressureThresholdLow', v);
-                    }),
-                _buildThresholdSlider("Pres (High)", pressureThresholdHigh, 900, 1400, Colors.amber,
-                    (v) {
-                      setState(() => pressureThresholdHigh = v);
-                      _saveThreshold('pressureThresholdHigh', v);
-                    }),
-                
-                const SizedBox(height: 20), // Padding at the bottom of scroll
-              ],
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 44,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.save_rounded, size: 18),
+                                label: const Text('Save Custom Thresholds'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueAccent,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: _saveCustomThresholds,
+                              ),
+                            ),
+                          ),
+                        ],
+                        
+                        const SizedBox(height: 20),
+                      ],
+
+
             ),
           ),
         ),
@@ -689,52 +923,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     );
   }
 
-  Widget _buildTimerSlider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Update every: ${updateInterval.toStringAsFixed(1)}s",
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12),
-          ),
-          Slider(
-            value: updateInterval,
-            min: 0.5,
-            max: 10.0,
-            divisions: 19,
-            activeColor: Colors.greenAccent,
-            onChanged: (val) => setState(() => updateInterval = val),
-            onChangeEnd: (val) => _startTimer(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAmplitudeSlider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Amplitude: ${simulationAmplitude.toStringAsFixed(2)}",
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12),
-          ),
-          Slider(
-            value: simulationAmplitude,
-            min: 0.0,
-            max: 10.0,
-            divisions: 50,
-            activeColor: Colors.orangeAccent,
-            onChanged: (val) => setState(() => simulationAmplitude = val),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildThresholdSlider(
     String label,
@@ -760,6 +948,127 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
             divisions: (max - min).toInt(),
             activeColor: color,
             onChanged: onCh,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Validates drafts and commits them to the live alert threshold variables ---
+  void _saveCustomThresholds() {
+    // 1. Low must be strictly less than High
+    if (_draftTempLow >= _draftTempHigh) {
+      setState(() => _thresholdError = 'Temp Low (${_draftTempLow.toStringAsFixed(0)}) must be less than Temp High (${_draftTempHigh.toStringAsFixed(0)}).');
+      return;
+    }
+    if (_draftHumLow >= _draftHumHigh) {
+      setState(() => _thresholdError = 'Humid Low (${_draftHumLow.toStringAsFixed(0)}) must be less than Humid High (${_draftHumHigh.toStringAsFixed(0)}).');
+      return;
+    }
+    if (_draftPresLow >= _draftPresHigh) {
+      setState(() => _thresholdError = 'Pres Low (${_draftPresLow.toStringAsFixed(0)}) must be less than Pres High (${_draftPresHigh.toStringAsFixed(0)}).');
+      return;
+    }
+    // 2. The current target (setpoint) must sit inside the custom range so the
+    //    green zone (target ± tolerance) makes sense within the orange zone.
+    if (targetTemp <= _draftTempLow || targetTemp >= _draftTempHigh) {
+      setState(() => _thresholdError =
+          'Target temp (${targetTemp.toStringAsFixed(1)}°C) must be inside your range '
+          '[${_draftTempLow.toStringAsFixed(0)} – ${_draftTempHigh.toStringAsFixed(0)}].');
+      return;
+    }
+    if (targetHum <= _draftHumLow || targetHum >= _draftHumHigh) {
+      setState(() => _thresholdError =
+          'Target humidity (${targetHum.toStringAsFixed(1)}%) must be inside your range '
+          '[${_draftHumLow.toStringAsFixed(0)} – ${_draftHumHigh.toStringAsFixed(0)}].');
+      return;
+    }
+    if (targetPres <= _draftPresLow || targetPres >= _draftPresHigh) {
+      setState(() => _thresholdError =
+          'Target pressure (${targetPres.toStringAsFixed(1)} hPa) must be inside your range '
+          '[${_draftPresLow.toStringAsFixed(0)} – ${_draftPresHigh.toStringAsFixed(0)}].');
+      return;
+    }
+
+    // All valid — commit and persist
+    setState(() {
+      tempThresholdLow = _draftTempLow;
+      tempThresholdHigh = _draftTempHigh;
+      humidityThresholdLow = _draftHumLow;
+      humidityThresholdHigh = _draftHumHigh;
+      pressureThresholdLow = _draftPresLow;
+      pressureThresholdHigh = _draftPresHigh;
+      _thresholdError = null;
+    });
+    _saveThreshold('tempThresholdLow', tempThresholdLow);
+    _saveThreshold('tempThresholdHigh', tempThresholdHigh);
+    _saveThreshold('humidityThresholdLow', humidityThresholdLow);
+    _saveThreshold('humidityThresholdHigh', humidityThresholdHigh);
+    _saveThreshold('pressureThresholdLow', pressureThresholdLow);
+    _saveThreshold('pressureThresholdHigh', pressureThresholdHigh);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Custom alert thresholds saved!'),
+        backgroundColor: Colors.blueAccent,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // --- Preset chip builder ---
+  Widget _buildPresetChip(String label, IconData icon, Color color) {
+    final bool selected = _selectedPreset == label;
+    return FilterChip(
+      avatar: Icon(icon, size: 16, color: selected ? Colors.white : color),
+      label: Text(label, style: TextStyle(color: selected ? Colors.white : Theme.of(context).colorScheme.onSurface, fontSize: 12)),
+      selected: selected,
+      selectedColor: color,
+      backgroundColor: Theme.of(context).cardColor,
+      checkmarkColor: Colors.white,
+      side: BorderSide(color: selected ? color : Theme.of(context).dividerColor),
+      onSelected: (_) {
+        setState(() {
+          _selectedPreset = label;
+          if (label == 'Lettuce') {
+            _sysConfigTemp = 15.0;
+            _sysConfigHum = 95.0;
+            _sysConfigPres = 900.0;
+          } else if (label == 'Strawberry') {
+            _sysConfigTemp = 20.0;
+            _sysConfigHum = 90.0;
+            _sysConfigPres = 1010.0;
+          }
+          // 'Custom' just keeps current slider values
+        });
+      },
+    );
+  }
+
+  // --- System Config slider (distinct style from alert slider) ---
+  Widget _buildSysConfigSlider(String label, double val, double min, double max, Color color, ValueChanged<double> onCh) {
+    String unit = label.contains('Temp') ? '°C' : label.contains('Humid') ? '%' : ' hPa';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12)),
+              Text('${val.toStringAsFixed(0)}$unit', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(trackHeight: 3),
+            child: Slider(
+              value: val,
+              min: min,
+              max: max,
+              divisions: (max - min).toInt(),
+              activeColor: color,
+              onChanged: onCh,
+            ),
           ),
         ],
       ),

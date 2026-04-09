@@ -3,26 +3,29 @@ import 'package:flutter/material.dart';
 import '../widgets/helpers.dart';
 
 class HomeScreen extends StatelessWidget {
-  final double t, h, p, at, ah, ap;
-  final double vpd;
+  final double t, h, p;
+  final double targetT, targetH, targetP;
   final double trendT, trendH, trendP;
-  final bool isTempCritical, isHumCritical, isPresCritical;
+  final double tempDanger, humDanger, presDanger;
+  final String? apiError;
+  final bool apiPolling;
 
   const HomeScreen({
     super.key,
     required this.t,
     required this.h,
     required this.p,
-    required this.at,
-    required this.ah,
-    required this.ap,
-    required this.vpd,
+    required this.targetT,
+    required this.targetH,
+    required this.targetP,
     this.trendT = 0.0,
     this.trendH = 0.0,
     this.trendP = 0.0,
-    this.isTempCritical = false,
-    this.isHumCritical = false,
-    this.isPresCritical = false,
+    this.tempDanger = 0.0,
+    this.humDanger = 0.0,
+    this.presDanger = 0.0,
+    this.apiError,
+    this.apiPolling = false,
   });
 
   @override
@@ -34,34 +37,74 @@ class HomeScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
+              // API connection status banner
+              if (apiError != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_off, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Backend unreachable — showing cached data",
+                          style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.9), fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (apiPolling && apiError == null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_done, color: Colors.green, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Live — connected to backend",
+                          style: TextStyle(color: Colors.green.withValues(alpha: 0.9), fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               buildSectionHeader("ENVIRONMENTAL DATA"),
               _buildLargeCard(
                 context,
                 "Temperature: ${t.toStringAsFixed(1)}°C",
-                "Avg: ${at.toStringAsFixed(1)}°C",
-                highlight: isTempCritical,
+                "Target: ${targetT.toStringAsFixed(1)}°C",
+                dangerLevel: tempDanger,
                 trend: trendT,
               ),
               _buildLargeCard(
                 context,
                 "Humidity: ${h.toStringAsFixed(0)}%",
-                "Avg: ${ah.toStringAsFixed(0)}%",
-                highlight: isHumCritical,
+                "Target: ${targetH.toStringAsFixed(0)}%",
+                dangerLevel: humDanger,
                 trend: trendH,
               ),
               _buildLargeCard(
                 context,
                 "Pressure: ${p.toStringAsFixed(1)} hPa",
-                "Avg: ${ap.toStringAsFixed(1)} hPa",
-                highlight: isPresCritical,
+                "Target: ${targetP.toStringAsFixed(1)} hPa",
+                dangerLevel: presDanger,
                 trend: trendP,
-              ),
-
-              // VPD card (moved from DetailScreen)
-              _buildLargeCard(
-                context,
-                "VPD: ${vpd.toStringAsFixed(3)} kPa",
-                "Vapor Pressure Deficit",
               ),
 
               buildSectionHeader("LIVE CAMERA"),
@@ -73,18 +116,20 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLargeCard(BuildContext context, String t1, String t2, {bool highlight = false, double? trend}) => AnimatedContainer(
+  Widget _buildLargeCard(BuildContext context, String t1, String t2, {double dangerLevel = 0.0, double? trend}) => AnimatedContainer(
         duration: const Duration(milliseconds: 420),
         curve: Curves.easeOutCubic,
         margin: const EdgeInsets.only(bottom: 15),
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: highlight ? Colors.red.withOpacity(0.06) : Theme.of(context).cardColor,
+          color: dangerLevel > 0.0
+              ? Color.lerp(Theme.of(context).cardColor, Colors.red.withValues(alpha: 0.15), dangerLevel)
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(30),
-          boxShadow: highlight
-              ? [BoxShadow(color: Colors.red.withOpacity(0.08), blurRadius: 18, spreadRadius: 2)]
-              : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
-          border: highlight ? Border.all(color: Colors.redAccent.withOpacity(0.25)) : null,
+          boxShadow: dangerLevel > 0.0
+              ? [BoxShadow(color: Colors.red.withValues(alpha: 0.15 * dangerLevel), blurRadius: 6 + (12 * dangerLevel), spreadRadius: 2 * dangerLevel)]
+              : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)],
+          border: dangerLevel > 0.0 ? Border.all(color: Colors.redAccent.withValues(alpha: 0.4 * dangerLevel)) : null,
         ),
         child: Row(
           children: [
@@ -94,7 +139,7 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Text(t1, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                   const SizedBox(height: 6),
-                  Text(t2, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
+                  Text(t2, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
                 ],
               ),
             ),
@@ -110,39 +155,25 @@ class HomeScreen extends StatelessWidget {
                   key: ValueKey<String>(trend.toStringAsFixed(2)),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: trend >= 0 ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.10),
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFE6E9EE)),
+                    border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // icon with small pop
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0.9, end: 1.0),
-                        duration: const Duration(milliseconds: 420),
-                        builder: (context, scale, child) => Transform.scale(
-                          scale: scale,
-                          child: Icon(
-                            trend >= 0 ? Icons.trending_up : Icons.trending_down,
-                            size: 16,
-                            color: trend >= 0 ? Colors.greenAccent : Colors.redAccent,
-                          ),
-                        ),
+                      Icon(
+                        Icons.difference_outlined,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                       const SizedBox(width: 6),
-
-                      // numeric count-up animation
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0.0, end: trend),
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, val, _) => Text(
-                          '${val >= 0 ? '+' : ''}${val.toStringAsFixed(1)}',
-                          style: TextStyle(
-                            color: trend >= 0 ? Colors.greenAccent : Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      // numeric delta
+                      Text(
+                        '${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(1)}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -162,7 +193,7 @@ class HomeScreen extends StatelessWidget {
         child: Center(
           child: Text(
             "Live Stream Simulation",
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
           ),
         ),
       );

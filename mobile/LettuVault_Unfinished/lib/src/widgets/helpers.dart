@@ -40,15 +40,24 @@ Widget buildTopBar(BuildContext context, String t) => Container(
       ),
     );
 
-Widget buildRadial(BuildContext context, double v, double min, double max, double lowThres, double highThres, {String unit = '', double size = 170}) {
+// greenLow/greenHigh: the inner ±tolerance safe zone boundary
+// redLow/redHigh: the outer alert threshold boundary (orange is between these and green)
+Widget buildRadial(BuildContext context, double v, double min, double max,
+    double greenLow, double greenHigh, double redLow, double redHigh,
+    {String unit = '', double size = 170}) {
   final double clampedV = v.clamp(min, max);
-  final bool isAlert = v < lowThres || v > highThres;
-  double buffer = (max - min) * 0.1;
+  final bool isAlert = v < redLow || v > redHigh;
 
   final theme = Theme.of(context);
   final cardBg = theme.cardColor;
   final labelColor = theme.colorScheme.onSurface.withOpacity(0.7);
   final valueColor = isAlert ? Colors.redAccent : theme.colorScheme.onSurface;
+
+  // Clamp all boundaries to the axis [min, max]
+  final double rLow  = redLow.clamp(min, max);
+  final double gLow  = greenLow.clamp(min, max);
+  final double gHigh = greenHigh.clamp(min, max);
+  final double rHigh = redHigh.clamp(min, max);
 
   return SizedBox(
     width: size,
@@ -58,9 +67,11 @@ Widget buildRadial(BuildContext context, double v, double min, double max, doubl
         RadialAxis(
           minimum: min,
           maximum: max,
+          interval: (max - min) > 100 ? 50.0 : 10.0,
           startAngle: 140,
           endAngle: 40,
           showLabels: true,
+          showLastLabel: true,
           showTicks: true,
           onLabelCreated: (AxisLabelCreatedArgs args) {
             args.text = double.parse(args.text).toInt().toString();
@@ -72,37 +83,28 @@ Widget buildRadial(BuildContext context, double v, double min, double max, doubl
             color: theme.brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF1F5F9),
           ),
           ranges: <GaugeRange>[
-            GaugeRange(
-              startValue: min,
-              endValue: lowThres,
-              color: Colors.red.withOpacity(0.85),
-              startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor,
-            ),
-            GaugeRange(
-              startValue: lowThres,
-              endValue: (lowThres + buffer).clamp(min, max),
-              color: Colors.orange.withOpacity(0.8),
-              startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor,
-            ),
-            GaugeRange(
-              startValue: (lowThres + buffer).clamp(min, max),
-              endValue: (highThres - buffer).clamp(min, max),
-              color: Colors.green.withOpacity(0.85),
-              startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor,
-            ),
-            GaugeRange(
-              startValue: (highThres - buffer).clamp(min, max),
-              endValue: highThres,
-              color: Colors.orange.withOpacity(0.8),
-              startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor,
-            ),
-            GaugeRange(
-              startValue: highThres,
-              endValue: max,
-              color: Colors.red.withOpacity(0.85),
-              startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor,
-            ),
+            // RED: min → redLow
+            GaugeRange(startValue: min, endValue: rLow,
+                color: Colors.red.withOpacity(0.85),
+                startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+            // ORANGE: redLow → greenLow
+            GaugeRange(startValue: rLow, endValue: gLow,
+                color: Colors.orange.withOpacity(0.8),
+                startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+            // GREEN: greenLow → greenHigh
+            GaugeRange(startValue: gLow, endValue: gHigh,
+                color: Colors.green.withOpacity(0.85),
+                startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+            // ORANGE: greenHigh → redHigh
+            GaugeRange(startValue: gHigh, endValue: rHigh,
+                color: Colors.orange.withOpacity(0.8),
+                startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+            // RED: redHigh → max
+            GaugeRange(startValue: rHigh, endValue: max,
+                color: Colors.red.withOpacity(0.85),
+                startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
           ],
+
           pointers: <GaugePointer>[
             NeedlePointer(
               value: clampedV,
@@ -141,6 +143,15 @@ Widget buildRadial(BuildContext context, double v, double min, double max, doubl
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Text(
+                  'LIVE READING',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 Text(
                   '${v.toInt()}$unit',
                   style: TextStyle(

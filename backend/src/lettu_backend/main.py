@@ -39,6 +39,34 @@ def startup_event():
     mqtt_service.is_subscriber = False
     mqtt_service.start()
 
+def run_db_clear():
+    """Drops and re-creates all tables (nuclear option)."""
+    from lettu_backend.models.database import Base, engine
+    print("\n⚠️  WARNING: THIS WILL DELETE ALL DATA ENTIRELY.")
+    confirm = input("Type 'YES' to delete everything: ")
+    if confirm != 'YES':
+        print("Aborted.")
+        return
+
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    print("✅ All tables dropped and re-created. Database is empty.")
+
+
+def start_cloud_local():
+    """Starts the cloud mirror locally for testing on port 8001."""
+    import subprocess, sys, os
+    from lettu_backend.core.config import PROJECT_ROOT
+    cloud_dir = os.path.join(PROJECT_ROOT, "cloud-server")
+    print("\n☁️ Starting Local Cloud Mirror on port 8001...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "uvicorn", "cloud_backend.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--app-dir", "src"],
+            cwd=cloud_dir
+        )
+    except KeyboardInterrupt:
+        print("\n☁️ Cloud Mirror stopped.")
+
 # 🔒 CORS Middleware
 app.add_middleware(
     CORSMiddleware,

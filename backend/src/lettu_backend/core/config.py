@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # 📡 MQTT Settings
     MQTT_BROKER: str = os.getenv("MQTT_BROKER")
     MQTT_PORT: int = int(os.getenv("MQTT_PORT") or 0)
+    MQTT_USERNAME: str | None = os.getenv("MQTT_USERNAME")
+    MQTT_PASSWORD: str | None = os.getenv("MQTT_PASSWORD")
     MQTT_TOPIC_SENSORS: str = os.getenv("MQTT_TOPIC_SENSORS")
     MQTT_TOPIC_AI: str = os.getenv("MQTT_TOPIC_AI")
 

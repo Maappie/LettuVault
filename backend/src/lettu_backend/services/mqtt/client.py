@@ -69,6 +69,13 @@ class MQTTClientWrapper:
         logger.info(f"[MQTT] Attempting to connect to broker @ {self.broker}:{self.port} ...")
         while True:
             try:
+                if settings.MQTT_USERNAME and settings.MQTT_PASSWORD:
+                    self.client.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
+                
+                # Automatically enable TLS if using secure ports (HiveMQ)
+                if self.port in [8883, 443]:
+                    self.client.tls_set()
+
                 self.client.connect(self.broker, self.port, 60)
                 self.client.loop_start()
                 logger.info(f"✅ [MQTT] Broker connection established @ {self.broker}:{self.port}")

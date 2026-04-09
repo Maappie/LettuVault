@@ -52,9 +52,53 @@ LettuVault/                     <-- Root Folder (The Workspace)
 
 ---
 
-## Architecture
+## 🏗️ Full System Architecture
 
+LettuVault combines hardware, backend services, computer vision, and a mobile client. The system architecture uses **MQTT** as the real-time messaging protocol for hardware and AI, alongside standard **REST/HTTP APIs** for the Mobile App UI.
+
+```mermaid
+graph TD
+    %% Define Layers
+    subgraph Local Edge Environment
+        ESP32[ESP32 Hardware<br/>(Sensors & Controls)]
+        AI[AI Camera System<br/>(YOLO Model + predict.py)]
+    end
+
+    subgraph Internet / Cloud
+        MQTT((MQTT Broker))
+        API[FastAPI Backend<br/>(lettu_backend)]
+        DB[(SQL Database)]
+    end
+
+    subgraph Client End
+        APP[Flutter Mobile App<br/>(Dashboard & Alerts)]
+    end
+
+    %% Edge Connections via MQTT
+    ESP32 <==>|MQTT: lettuvault/sensors<br/>lettuvault/control| MQTT
+    AI <==>|MQTT: lettuvault/ai<br/>lettuvault/control| MQTT
+
+    %% Backend Connections
+    MQTT <==>|Pub/Sub Event Ingestion| API
+    API <==>|SQLAlchemy ORM + CRUD| DB
+
+    %% Mobile Connections via REST
+    APP <==>|REST HTTP/HTTPS<br/>JSON & JWT Auth| API
 ```
+
+### Architecture Breakdown
+1. **Embedded/Hardware (`/embedded/` ESP32):** Reads live telemetry (Temperature, Humidity, Pressure) and publishes to the MQTT broker constantly. It also listens for configuration updates (setpoints) from the backend.
+2. **AI Edge Worker (`/ai_system/`):** A locally running Python script executing Computer Vision inference (YOLO) on a local camera feed. Publishes detected crop statuses and pest alerts to the MQTT broker.
+3. **Backend Gateway (`/backend/` FastAPI):** The central brain. It subscribes to the MQTT broker to ingest all hardware and AI telemetry into the relational database. It then exposes that data outwards via REST HTTP endpoints.
+4. **Mobile Client (`/mobile/` Flutter):** The user interface. It connects strictly to the backend via standard HTTP calls (GET/POST) utilizing JSON Web Tokens for security, completely abstracted away from the MQTT hardware layer.
+
+---
+
+## 💻 Local Sandbox Execution Flow
+
+When running locally using `lettu_vault_start`, the system spins up everything automatically in a unified TUI. Here is how the processes orchestrate underneath:
+
+```text
 .env (single source of config)
     │
     ▼
