@@ -198,6 +198,16 @@
             gap: 1.5rem;
         }
 
+        /* ── Hover Flicker Fix Strategy: 
+           Wrap the card in a fixed-size spacer lock.
+           The inner card pops out absolutely so it doesn't move sibling layout elements. 
+        ── */
+        .team-card-wrapper {
+            position: relative;
+            width: 210px;
+            height: 280px;
+        }
+
         .team-card {
             background: rgba(15, 30, 20, 0.6);
             backdrop-filter: blur(10px);
@@ -212,15 +222,18 @@
             cursor: pointer;
             overflow: hidden;
             transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            position: relative;
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 5;
         }
 
         .team-card:hover {
-            width: 500px;
+            width: 480px;
             background: rgba(10, 25, 15, 0.85);
             border-color: rgba(74, 222, 128, 0.6);
             transform: translateY(-5px);
             box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(74, 222, 128, 0.1);
+            z-index: 100; /* Pop to highest layer so it covers siblings */
         }
 
         .team-primary {
@@ -247,12 +260,11 @@
             overflow: hidden;
         }
 
-        /* Use this class later when you upload photos */
         .team-photo img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            display: none; /* Hide default broken img icon */
+            display: block; /* Ensures images are visible */
         }
 
         .team-name {
@@ -303,6 +315,55 @@
             color: #94a3b8;
             line-height: 1.6;
         }
+
+        /* ── Mobile Responsiveness ── */
+        @media (max-width: 850px) {
+            h1 { font-size: 3rem; }
+            .subtitle { font-size: 1.05rem; }
+            .container { 
+                padding: 3rem 1.5rem; 
+                border-radius: 16px;
+            }
+            .team-intro-card {
+                padding: 1.5rem;
+                margin-left: 1rem;
+                margin-right: 1rem;
+            }
+            .team-intro-photo { height: 250px; }
+            
+            /* Destroy horizontal absolute hover on mobile constraints */
+            .team-card-wrapper { 
+                width: 100%; 
+                max-width: 350px;
+                height: auto; 
+            }
+            .team-card {
+                position: relative;
+                flex-direction: column;
+                width: 100%;
+                height: auto;
+                transition: none;
+            }
+            .team-card:hover {
+                width: 100%;
+                transform: none;
+            }
+            .team-primary {
+                min-width: 100%;
+                margin-bottom: 1rem;
+            }
+            .team-secondary {
+                opacity: 1; /* Always show description below photo on small screens */
+                transform: none;
+                margin: 0;
+                padding-left: 0;
+                padding-top: 1rem;
+                border-left: none;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                min-width: 100%;
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -346,8 +407,8 @@
         <!-- Group Introduction -->
         <div class="team-intro-card">
             <div class="team-intro-photo">
-                <!-- Group Photo Placeholder -->
-                Upload your group photo here (e.g. &lt;img src="team.jpg"&gt;)
+                Upload your group photo as 'group.jpg' in the static folder.
+                <img src="/static/group" alt="LettuVault Group Photo" onerror="this.style.display='none'">
             </div>
             <p class="highlight">We are 4th year PLM students at Pamantasan ng Lungsod ng Maynila, taking Bachelor of Science in Computer Engineering.</p>
             <p>We created <strong>LettuVault</strong> as our capstone thesis project to bridge the gap between traditional agricultural practices and modern hardware capabilities. Driven by a passion to solve real-world problems through IoT and AI, our goal is to empower farmers and smart greenhouses with accessible, highly autonomous, and data-driven crop analysis systems.</p>
@@ -355,67 +416,77 @@
 
         <div class="team-grid">
             <!-- Member 1 -->
-            <div class="team-card">
-                <div class="team-primary">
-                    <div class="team-photo">Photo</div>
-                    <div class="team-name">Vaan Meyvn Cariazo</div>
-                    <div class="team-role">Role Title</div>
-                </div>
-                <div class="team-secondary">
-                    <div class="team-secondary-title">About Vaan</div>
-                    <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+            <div class="team-card-wrapper">
+                <div class="team-card">
+                    <div class="team-primary">
+                        <div class="team-photo"><img src="/static/vaan" alt="Vaan" onerror="this.style.display='none'"></div>
+                        <div class="team-name">Vaan Meyvn Cariazo</div>
+                        <div class="team-role">Role Title</div>
+                    </div>
+                    <div class="team-secondary">
+                        <div class="team-secondary-title">About Vaan</div>
+                        <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Member 2 -->
-            <div class="team-card">
-                <div class="team-primary">
-                    <div class="team-photo">Photo</div>
-                    <div class="team-name">Jeraldine Banate</div>
-                    <div class="team-role">Role Title</div>
-                </div>
-                <div class="team-secondary">
-                    <div class="team-secondary-title">About Jeraldine</div>
-                    <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+            <div class="team-card-wrapper">
+                <div class="team-card">
+                    <div class="team-primary">
+                        <div class="team-photo"><img src="/static/jeraldine" alt="Jeraldine" onerror="this.style.display='none'"></div>
+                        <div class="team-name">Jeraldine Banate</div>
+                        <div class="team-role">Role Title</div>
+                    </div>
+                    <div class="team-secondary">
+                        <div class="team-secondary-title">About Jeraldine</div>
+                        <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Member 3 -->
-            <div class="team-card">
-                <div class="team-primary">
-                    <div class="team-photo">Photo</div>
-                    <div class="team-name">Hasnayrah Malidas</div>
-                    <div class="team-role">Role Title</div>
-                </div>
-                <div class="team-secondary">
-                    <div class="team-secondary-title">About Hasnayrah</div>
-                    <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+            <div class="team-card-wrapper">
+                <div class="team-card">
+                    <div class="team-primary">
+                        <div class="team-photo"><img src="/static/hash" alt="Hasnayrah" onerror="this.style.display='none'"></div>
+                        <div class="team-name">Hasnayrah Malidas</div>
+                        <div class="team-role">Role Title</div>
+                    </div>
+                    <div class="team-secondary">
+                        <div class="team-secondary-title">About Hasnayrah</div>
+                        <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Member 4 -->
-            <div class="team-card">
-                <div class="team-primary">
-                    <div class="team-photo">Photo</div>
-                    <div class="team-name">Renz Daneco Mapa</div>
-                    <div class="team-role">Role Title</div>
-                </div>
-                <div class="team-secondary">
-                    <div class="team-secondary-title">About Renz</div>
-                    <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+            <div class="team-card-wrapper">
+                <div class="team-card">
+                    <div class="team-primary">
+                        <div class="team-photo"><img src="/static/mapa" alt="Renz" onerror="this.style.display='none'"></div>
+                        <div class="team-name">Renz Daneco Mapa</div>
+                        <div class="team-role">Role Title</div>
+                    </div>
+                    <div class="team-secondary">
+                        <div class="team-secondary-title">About Renz</div>
+                        <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Member 5 -->
-            <div class="team-card">
-                <div class="team-primary">
-                    <div class="team-photo">Photo</div>
-                    <div class="team-name">Raiza Rhean Mortera</div>
-                    <div class="team-role">Role Title</div>
-                </div>
-                <div class="team-secondary">
-                    <div class="team-secondary-title">About Raiza</div>
-                    <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+            <div class="team-card-wrapper">
+                <div class="team-card">
+                    <div class="team-primary">
+                        <div class="team-photo"><img src="/static/rai" alt="Raiza" onerror="this.style.display='none'"></div>
+                        <div class="team-name">Raiza Rhean Mortera</div>
+                        <div class="team-role">Role Title</div>
+                    </div>
+                    <div class="team-secondary">
+                        <div class="team-secondary-title">About Raiza</div>
+                        <div class="team-secondary-desc">Edit this description later. Insert background, expertise, or project contributions here.</div>
+                    </div>
                 </div>
             </div>
         </div>

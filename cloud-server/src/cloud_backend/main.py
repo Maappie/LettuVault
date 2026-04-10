@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from cloud_backend.core.config import settings
 from cloud_backend.api.v1.endpoints import router as api_v1_router
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -17,6 +19,10 @@ app = FastAPI(
     ),
     version=settings.VERSION,
 )
+
+static_dir = os.path.join(os.path.dirname(__file__), "global", "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Allow Flutter mobile app from any origin
 app.add_middleware(
