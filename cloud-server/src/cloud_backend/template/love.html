@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LettuVault Love</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #1a020d 0%, #4a0022 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden;
+            color: white;
+            position: relative;
+        }
+        /* Glassmorphism Container */
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 4rem 3rem;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6), inset 0 0 20px rgba(255,75,114,0.1);
+            max-width: 600px;
+            width: 90%;
+            z-index: 10;
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+            100% { transform: translateY(0px); }
+        }
+        /* Romantic Typography */
+        h1 {
+            font-family: 'Dancing Script', cursive;
+            font-size: 5.5rem;
+            background: linear-gradient(to right, #ff758c 0%, #ff7eb3 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 30px rgba(255, 75, 114, 0.4);
+            margin-bottom: 0.5rem;
+            line-height: 1.2;
+        }
+        p.subtitle {
+            font-size: 1.1rem;
+            color: #fda4af;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-weight: 300;
+            margin-bottom: 2.5rem;
+        }
+        /* Cloud Status Nodes */
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 1.5rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255,75,114, 0.15);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+        .stat-box:hover::before {
+            transform: translateX(100%);
+        }
+        .stat-box:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(255,75,114, 0.15);
+            border-color: rgba(255,75,114, 0.4);
+            box-shadow: 0 15px 30px rgba(255,75,114,0.2);
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 0.2rem;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #fecdd3;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        
+        /* Floating Heart Particles */
+        .heart {
+            position: absolute;
+            color: #ff2a5f;
+            opacity: 0.15;
+            user-select: none;
+            pointer-events: none;
+            filter: drop-shadow(0 0 10px rgba(255,42,95,0.5));
+            animation: fly linear infinite, pulse 2s ease-in-out infinite alternate;
+        }
+        @keyframes fly {
+            0% { transform: translateY(100vh) rotate(0deg) scale(0.5); opacity: 0; }
+            10% { opacity: 0.3; }
+            90% { opacity: 0.3; }
+            100% { transform: translateY(-200px) rotate(360deg) scale(1.2); opacity: 0; }
+        }
+        @keyframes pulse {
+            0% { filter: drop-shadow(0 0 5px rgba(255,42,95,0.3)); }
+            100% { filter: drop-shadow(0 0 20px rgba(255,42,95,0.8)); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Dynamic Heart Generator -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const numHearts = window.innerWidth < 768 ? 12 : 25;
+            for(let i=0; i<numHearts; i++) {
+                let heart = document.createElement("div");
+                heart.innerHTML = "❤";
+                heart.className = "heart";
+                heart.style.left = Math.random() * 100 + "vw";
+                heart.style.fontSize = (Math.random() * 2 + 1) + "rem";
+                heart.style.animationDelay = (Math.random() * 10) + "s";
+                heart.style.animationDuration = (Math.random() * 10 + 10) + "s";
+                document.body.appendChild(heart);
+            }
+        });
+    </script>
+
+    <div class="container">
+        <h1>I love you</h1>
+        <p class="subtitle">Forever & Always</p>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value">Live</div>
+                <div class="stat-label">Cloud Connected</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">Secure & Safe</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

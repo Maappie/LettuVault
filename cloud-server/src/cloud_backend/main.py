@@ -3,6 +3,7 @@
 # No MQTT. No hardware. No AI. Data mirror + sync endpoint only.
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from cloud_backend.core.config import settings
@@ -45,3 +46,13 @@ def health_check():
         "version": settings.VERSION,
         "status": "Online",
     }
+
+
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/love", tags=["UI"], include_in_schema=False)
+def get_romantic_dashboard():
+    # Serve the love.html template from the template folder
+    template_path = os.path.join(os.path.dirname(__file__), "template", "love.html")
+    return FileResponse(template_path)

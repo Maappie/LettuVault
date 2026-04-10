@@ -61,13 +61,15 @@ DEFAULT_STATE = {
 
 def load_state() -> dict:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    state = DEFAULT_STATE.copy()
     if STATE_FILE.exists():
         try:
             with open(STATE_FILE, "r") as f:
-                return json.load(f)
+                loaded = json.load(f)
+                state.update(loaded)
         except (json.JSONDecodeError, IOError):
             logger.warning("⚠️  State file corrupted — resetting to defaults.")
-    return DEFAULT_STATE.copy()
+    return state
 
 def save_state(state: dict):
     with open(STATE_FILE, "w") as f:
@@ -208,10 +210,10 @@ def build_config_payload(rows: list[dict]) -> list[dict]:
 # SYNC EXECUTION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_sync(state: dict) -> dict:
+def run_sync(state: dict) -> tuple[dict, int]:
     """
     Queries the local DB, builds a batch, and POSTs it to the cloud.
-    Returns an updated state dict on success, or the original state on failure.
+    Returns (updated_state, records_sent).
     """
     sensors   = fetch_unsynced_sensor_readings(LOCAL_DB_PATH,  state["last_synced_sensor"],    BATCH_SIZE)
     conditions = fetch_unsynced_condition_scans(LOCAL_DB_PATH, state["last_synced_condition"],   BATCH_SIZE)
@@ -220,7 +222,7 @@ def run_sync(state: dict) -> dict:
 
     if not sensors and not conditions and not produces and not configs:
         logger.info("✅  Nothing new to sync.")
-        return state
+        return state, 0
 
     payload = {
         "sensor_readings": build_sensor_payload(sensors),
@@ -230,11 +232,16 @@ def run_sync(state: dict) -> dict:
     }
 
     total = len(sensors) + len(conditions) + len(produces) + len(configs)
-    logger.info(f"📦  Syncing {total} record(s) to cloud ({CLOUD_SYNC_URL}) ...")
+    
+    # Clean up the base URL and append the endpoint
+    base_url = CLOUD_SYNC_URL.rstrip("/")
+    sync_endpoint_url = f"{base_url}/api/v1/sync"
+
+    logger.info(f"📦  Syncing {total} record(s) to cloud ({sync_endpoint_url}) ...")
 
     try:
         response = requests.post(
-            CLOUD_SYNC_URL,
+            sync_endpoint_url,
             json=payload,
             headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
             timeout=30,
@@ -254,7 +261,7 @@ def run_sync(state: dict) -> dict:
         if configs:
             new_state["last_synced_config"] = configs[-1]["timestamp"]
 
-        return new_state
+        return new_state, total
 
     except requests.exceptions.ConnectionError:
         logger.warning("🔌  Network error — cloud unreachable. Will retry next cycle.")
@@ -266,7 +273,7 @@ def run_sync(state: dict) -> dict:
         logger.error(f"❌  Unexpected error during sync: {e}")
 
     # On any failure, return the original state unchanged — no data is lost
-    return state
+    return state, 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -295,9 +302,21 @@ def main():
         try:
             if not is_online():
                 logger.warning("📡  No internet connection — skipping sync cycle.")
+                time.sleep(SYNC_INTERVAL_SECS)
             else:
-                state = run_sync(state)
+                state, records_sent = run_sync(state)
                 save_state(state)
+
+                # ── DYNAMIC CATCH-UP LOGIC ──────────────────────────────────────
+                # If we hit the BATCH_SIZE limit on ANY of the tables, there is 
+                # almost certainly a giant backlog of rows waiting behind them.
+                # Instead of waiting a full minute, we turbo-sync every 5 seconds 
+                # until the backlog is completely burned down.
+                if records_sent >= BATCH_SIZE:
+                    logger.info("🔥 Backlog detected! Pushing the next batch in 5 seconds...")
+                    time.sleep(5)
+                else:
+                    time.sleep(SYNC_INTERVAL_SECS)
 
         except KeyboardInterrupt:
             logger.info("🛑  Sync Engine stopped by user.")
@@ -305,9 +324,6 @@ def main():
         except Exception as e:
             # Catch-all guard — the engine must NEVER crash
             logger.error(f"❌  Unhandled exception in main loop: {e}. Continuing...")
-
-        time.sleep(SYNC_INTERVAL_SECS)
-
-
+            time.sleep(5)
 if __name__ == "__main__":
     main()
