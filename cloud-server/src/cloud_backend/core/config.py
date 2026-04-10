@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     CLOUD_SYNC_API_KEY: str = os.getenv("CLOUD_SYNC_API_KEY", "change-me-in-production")
 
     # Separate key for the Flutter Mobile App (online mode)
-    CLOUD_MOBILE_API_KEY: str = os.getenv("CLOUD_MOBILE_API_KEY", "change-me-in-production")
+    CLOUD_MOBILE_API_KEY: str = os.getenv(
+        "CLOUD_MOBILE_API_KEY", 
+        "LettuVault-Mobile-API-KEY-1231325213!@PLMstudents2026"
+    )
 
     # Optional: JWT for the Mobile App to query this cloud server directly
     SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")
