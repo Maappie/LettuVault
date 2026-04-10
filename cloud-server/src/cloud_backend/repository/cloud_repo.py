@@ -68,4 +68,5 @@ class CloudRepository:
         q = self.db.query(CloudSystemConfig)
         if vault_id:
             q = q.filter(CloudSystemConfig.vault_id == vault_id)
-        return q.order_by(CloudSystemConfig.timestamp.desc()).first()
+        return q.order_by(CloudSystemConfig.timestamp.desc()).limit(1).all()
+

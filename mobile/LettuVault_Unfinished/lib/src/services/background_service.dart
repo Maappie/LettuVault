@@ -267,8 +267,8 @@ Future<void> _pollAndNotify(
   try {
     // ── 1. Fetch the latest sensor reading ──────────────────────────────────
     final readingResp = await http.get(
-      Uri.parse('$kBaseUrl$kApiPrefix/internal-environment?limit=1&order=desc'),
-      headers: {'X-API-KEY': kApiKey},
+      Uri.parse('$kLocalBaseUrl$kApiPrefix/internal-environment?limit=1&order=desc'),
+      headers: {'X-API-KEY': 'lettuce-master-key-2024'},
     ).timeout(const Duration(seconds: 10));
 
     debugPrint('$tag Sensor API → ${readingResp.statusCode}');
@@ -297,8 +297,8 @@ Future<void> _pollAndNotify(
         now.difference(_configLastFetched).inSeconds >= 60) {
       try {
         final cfgResp = await http.get(
-          Uri.parse('$kBaseUrl$kApiPrefix/system_config'),
-          headers: {'X-API-KEY': kApiKey},
+          Uri.parse('$kLocalBaseUrl$kApiPrefix/system_config'),
+          headers: {'X-API-KEY': 'lettuce-master-key-2024'},
         ).timeout(const Duration(seconds: 10));
 
         if (cfgResp.statusCode == 200) {

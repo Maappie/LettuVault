@@ -54,7 +54,7 @@ def sync_vault_data(batch: SyncBatchPayload, db: Session = Depends(get_db)):
 # All mobile-facing endpoints use X-MOBILE-API-KEY — separate from the sync key.
 
 @router.get(
-    "/sensor-readings",
+    "/internal-environment",
     dependencies=[Depends(require_mobile_key)],
     summary="[Mobile] Latest sensor readings from cloud mirror",
 )
@@ -96,7 +96,7 @@ def list_produce_scans(
 
 
 @router.get(
-    "/system-config",
+    "/system_config",
     dependencies=[Depends(require_mobile_key)],
     summary="[Mobile] Latest system config from cloud mirror",
 )
