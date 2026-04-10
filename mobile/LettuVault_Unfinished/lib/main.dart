@@ -7,15 +7,20 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wifi_iot/wifi_iot.dart';
 
 import 'src/models/sensor_reading.dart';
 import 'src/screens/home_screen.dart';
 import 'src/screens/detail_screen.dart';
 import 'src/screens/log_status_screen.dart';
+import 'src/screens/splash_screen.dart';
+import 'src/screens/setup_offline_screen.dart';
 import 'src/widgets/helpers.dart';
 import 'src/repositories/environment_repository.dart';
 import 'src/repositories/config_repository.dart';
 import 'src/core/constants.dart';
+import 'src/core/app_mode.dart';
+import 'src/core/secure_storage.dart';
 import 'src/services/background_service.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -29,8 +34,9 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Best-effort background service — if the plugin fails (e.g. hot restart,
-  // older device), the app still launches and runs normally.
+  // Seed default API keys into secure storage on first run
+  await SecureStorage.seedDefaultsIfNeeded();
+  // Best-effort background service init
   try {
     await initBackgroundService();
   } catch (e) {
@@ -61,12 +67,11 @@ void main() async {
           useMaterial3: true,
         ),
         themeMode: mode,
-        // Use a GlobalKey so external code (sensor integration) can inject readings
         home: MainNavigationContainer(key: MainNavigationContainer.navKey),
       ),
     ),
   );
-} 
+}
 
 // --- MASTER CONTROLLER ---
 class MainNavigationContainer extends StatefulWidget {
@@ -88,8 +93,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
 
   // UI theme state
   bool _isDarkMode = false;
-  // Show startup loading screen until async initialization completes
+  // Show startup splash until async initialization completes
   bool _isLoading = true;
+  // First-time offline setup
+  bool _showOfflineSetup = false;
+  // Mode-switching state
+  bool _isSwitchingMode = false;
+  String? _modeError;
 
   double tempThresholdLow = 18.0; 
   double tempThresholdHigh = 28.0; 
@@ -176,8 +186,12 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       debugPrint('[BG] Could not subscribe to background readings: $e');
     }
 
-    // keep the splash visible for a short, pleasant duration
-    await Future.delayed(const Duration(milliseconds: 600));
+    // Check if offline setup has ever been completed — show it if not
+    final setupDone = await SecureStorage.isOfflineSetupDone();
+    if (!setupDone && mounted) {
+      setState(() { _isLoading = false; _showOfflineSetup = true; });
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -640,6 +654,15 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       const LogStatusScreen(),
     ];
 
+    // Show first-time offline setup screen
+    if (_showOfflineSetup) {
+      return SetupOfflineScreen(onDone: () {
+        setState(() => _showOfflineSetup = false);
+        _startApiPolling();
+        _performPostSetupTasks();
+      });
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -662,15 +685,127 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
           ),
         ),
 
+        // Splash shown during startup
         if (_isLoading)
+          const Positioned.fill(child: SplashScreen()),
+
+        // Full-screen loading while switching modes
+        if (_isSwitchingMode)
           Positioned.fill(
-            child: buildLoadingScreen(context),
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.75),
+              child: const Center(child: SplashScreen()),
+            ),
           ),
       ],
     );
   }
 
+  // ── Mode Switching Logic ─────────────────────────────────────────────────
+
+  Future<void> _switchToOfflineMode() async {
+    setState(() { _isSwitchingMode = true; _modeError = null; });
+    try {
+      final ssid = await SecureStorage.getPiSsid();
+      final pass = await SecureStorage.getPiPassword();
+
+      if (ssid == null || pass == null) {
+        // No credentials saved — open setup screen
+        setState(() { _isSwitchingMode = false; _showOfflineSetup = true; });
+        return;
+      }
+
+      final connected = await WiFiForIoTPlugin.connect(
+        ssid,
+        password: pass,
+        security: NetworkSecurity.WPA,
+        joinOnce: false,
+        withInternet: false,
+      );
+
+      if (!mounted) return;
+      if (connected == true) {
+        appModeNotifier.value = AppMode.offline;
+        _startApiPolling();
+        setState(() { _isSwitchingMode = false; _modeError = null; });
+      } else {
+        setState(() {
+          _isSwitchingMode = false;
+          _modeError = 'Could not connect to LettuVault AP. Make sure the Pi is powered on and nearby.';
+        });
+        _showModeErrorSnackbar();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSwitchingMode = false;
+        _modeError = 'Connection error: ${e.toString()}';
+      });
+      _showModeErrorSnackbar();
+    }
+  }
+
+  void _switchToOnlineMode() {
+    appModeNotifier.value = AppMode.online;
+    _startApiPolling();
+    setState(() { _modeError = null; });
+  }
+
+  void _showModeErrorSnackbar() {
+    if (!mounted || _modeError == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_modeError!),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  Future<void> _performPostSetupTasks() async {
+    try {
+      final available = await isAutoStartAvailable;
+      if (available == true) {
+        final prefs = await SharedPreferences.getInstance();
+        final bool prompted = prefs.getBool('autoStartPrompted') ?? false;
+        if (!prompted || prefs.getBool('v2Prompt') != true) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('Keep Alerts Running'),
+              content: const Text(
+                'To ensure you receive critical alerts when LettuVault is closed:\n\n'
+                '1. We will open your "App Launch" settings.\n'
+                '2. Find LettuVault in the list and turn it ON.\n'
+                '3. Press Back to return here.',
+                style: TextStyle(height: 1.5),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Skip')),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await getAutoStartPermission();
+                  },
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          await prefs.setBool('autoStartPrompted', true);
+          await prefs.setBool('v2Prompt', true);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AutoStart] error: $e');
+    }
+  }
+
  Widget _buildAppDrawer(BuildContext context) {
+  final isOffline = appModeNotifier.value == AppMode.offline;
   return Drawer(
     backgroundColor: Theme.of(context).colorScheme.surface,
     child: Column(
@@ -700,6 +835,76 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // ── Connection Mode Toggle ─────────────────────────
+                        buildSectionHeader("Connection Mode"),
+                        ValueListenableBuilder<AppMode>(
+                          valueListenable: appModeNotifier,
+                          builder: (context, mode, _) {
+                            final isOffline = mode == AppMode.offline;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isOffline
+                                    ? Colors.orange.withValues(alpha: 0.08)
+                                    : Colors.blue.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isOffline
+                                      ? Colors.orange.withValues(alpha: 0.3)
+                                      : Colors.blue.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isOffline ? Icons.wifi : Icons.cloud,
+                                    color: isOffline ? Colors.orange : Colors.blue,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          isOffline ? 'Offline Mode' : 'Online Mode',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Theme.of(context).colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        Text(
+                                          isOffline
+                                              ? 'Connected to LettuVault AP'
+                                              : 'Using cloud server',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: isOffline,
+                                    activeColor: Colors.orange,
+                                    inactiveTrackColor: Colors.blue.shade200,
+                                    onChanged: (_) {
+                                      Navigator.of(context).pop();
+                                      if (isOffline) {
+                                        _switchToOnlineMode();
+                                      } else {
+                                        _switchToOfflineMode();
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                        Divider(color: Theme.of(context).dividerColor),
                         _buildAlertSwitch(),
                         _buildThemeSwitch(),
                         _buildClearLogsTile(context),

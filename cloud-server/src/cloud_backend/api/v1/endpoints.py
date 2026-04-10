@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from cloud_backend.core.security import require_sync_key
+from cloud_backend.core.security import require_sync_key, require_mobile_key
 from cloud_backend.models.database import SessionLocal
 from cloud_backend.models.domain import SyncBatchPayload, SyncResult
 from cloud_backend.repository.cloud_repo import CloudRepository
@@ -32,9 +32,6 @@ def get_db():
 def sync_vault_data(batch: SyncBatchPayload, db: Session = Depends(get_db)):
     """
     Protected endpoint called by the Sync Engine running on each Raspberry Pi.
-    Accepts a batch of sensor readings and AI scan records, saves them to the
-    cloud database with their originating vault_id attached.
-
     Requires: X-SYNC-API-KEY header matching CLOUD_SYNC_API_KEY in .env
     """
     repo = CloudRepository(db)
@@ -54,10 +51,12 @@ def sync_vault_data(batch: SyncBatchPayload, db: Session = Depends(get_db)):
 
 
 # ── GET endpoints (Mobile App reads the cloud mirror) ─────────────────────────
+# All mobile-facing endpoints use X-MOBILE-API-KEY — separate from the sync key.
+
 @router.get(
     "/sensor-readings",
-    dependencies=[Depends(require_sync_key)],
-    summary="List sensor readings, optionally filtered by vault_id",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] Latest sensor readings from cloud mirror",
 )
 def list_sensor_readings(
     vault_id: Optional[str] = Query(None, description="Filter by vault ID"),
@@ -70,8 +69,8 @@ def list_sensor_readings(
 
 @router.get(
     "/ai-scans/condition",
-    dependencies=[Depends(require_sync_key)],
-    summary="List AI condition scans, optionally filtered by vault_id",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] AI condition scans from cloud mirror",
 )
 def list_condition_scans(
     vault_id: Optional[str] = Query(None),
@@ -84,8 +83,8 @@ def list_condition_scans(
 
 @router.get(
     "/ai-scans/produce",
-    dependencies=[Depends(require_sync_key)],
-    summary="List AI produce scans, optionally filtered by vault_id",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] AI produce scans from cloud mirror",
 )
 def list_produce_scans(
     vault_id: Optional[str] = Query(None),
@@ -94,3 +93,16 @@ def list_produce_scans(
 ):
     repo = CloudRepository(db)
     return repo.get_produce_scans(vault_id=vault_id, limit=limit)
+
+
+@router.get(
+    "/system-config",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] Latest system config from cloud mirror",
+)
+def get_latest_system_config(
+    vault_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    repo = CloudRepository(db)
+    return repo.get_latest_system_config(vault_id=vault_id)

@@ -63,3 +63,9 @@ class CloudRepository:
         if vault_id:
             q = q.filter(CloudAIProduceScan.vault_id == vault_id)
         return q.order_by(CloudAIProduceScan.timestamp.desc()).limit(limit).all()
+
+    def get_latest_system_config(self, vault_id: str | None = None):
+        q = self.db.query(CloudSystemConfig)
+        if vault_id:
+            q = q.filter(CloudSystemConfig.vault_id == vault_id)
+        return q.order_by(CloudSystemConfig.timestamp.desc()).first()

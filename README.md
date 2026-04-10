@@ -45,52 +45,122 @@ LettuVault/                     <-- Root Folder (The Workspace)
 ├── embedded/                   <-- ESP32 Source Code (Work in progress)
 ├── mobile/                     <-- Flutter Source Code (Work in progress)
 │
+├── cloud-server/               <-- Render Cloud Mirror (Package: cloud_backend)
+│   ├── pyproject.toml
+│   └── src/cloud_backend/
+│       ├── main.py             <-- Cloud FastAPI entry + UI rendering
+│       ├── api/v1/endpoints.py <-- Cloud REST API (/sync logic)
+│       └── template/           <-- Cloud web templates (/home, /love)
+│
 ├── data/lettu_vault.db         <-- SQLite Database (auto-created)
 ├── clear_db.py                 <-- Utility: Wipe all records from DB
-└── verify_data.py              <-- Utility: Count records in each table
+├── verify_data.py              <-- Utility: Count records in each table
+└── sync_engine.py              <-- Background API Worker: Syncs local DB to Cloud
 ```
 
 ---
 
-## 🏗️ Full System Architecture
+## 🏗️ System Design Overview (IPO Model)
 
-LettuVault combines hardware, backend services, computer vision, and a mobile client. The system architecture uses **MQTT** as the real-time messaging protocol for hardware and AI, alongside standard **REST/HTTP APIs** for the Mobile App UI.
+LettuVault is a smart postharvest storage system for *Lactuca sativa* (lettuce) that combines IoT hardware, Edge AI, and cloud connectivity to extend shelf life and reduce postharvest losses.
+
+```mermaid
+flowchart LR
+    Input["**INPUT**\n\n**Hardware:**\n- ESP32 Microcontroller\n- Raspberry Pi 4\n- BME280 Sensor (Temp, Hum, Pressure)\n- Camera Module\n- Cooling System & LED Lighting\n\n**Software:**\n- YOLOv11 / Python / OpenCV\n- FastAPI Backend + MQTT\n- IoT Mobile Dashboard\n- Cloud Sync Engine\n\n**Environmental Inputs:**\n- Real-time Temp, Humidity, Pressure\n- Live camera feed of crop condition\n\n**Sample Produce:**\n- Fresh Lactuca sativa (Lettuce)\n- Strawberries"] --> Process
+
+    Process["**PROCESS**\n\n**Hardware Assembly:**\n- Insulated storage box build\n- Sensor, camera & actuator integration\n\n**Programming & IoT:**\n- ESP32 firmware for monitoring & automation\n- FastAPI backend + MQTT for data ingestion\n- Cloud dashboard for remote access\n\n**AI Image Processing:**\n- Periodic image capture via camera\n- YOLOv11 classifies: lettuce, strawberry,\n  wilting, and worm presence\n- 3-second stability check before alert fires\n\n**Regulation Mechanism:**\n- Auto-activation of cooling system\n- MQTT commands from backend to ESP32\n- Prevents heat buildup & moisture loss\n\n**Data Gathering:**\n- Monitoring crop degradation over time\n- Comparing LettuVault vs. ambient storage"] --> Output
+
+    Output["**OUTPUT**\n\n- Operational LettuVault prototype\n  with automatic sensing & regulation\n- Real-time monitoring via mobile app\n  (local AP + internet remote access)\n- AI-based spoilage detection system\n  (wilting & worm detection)\n- Cloud-synced historical data on\n  Supabase PostgreSQL\n- Recorded performance data:\n  temperature stability, visual degradation"] --> Outcome
+
+    Outcome["**OUTCOME**\n\n- Extended shelf life of lettuce\n  during transport & short-term storage\n- Reduced postharvest losses for farmers,\n  traders, and retailers\n- Improved visual quality & marketability\n- Data archive accessible anywhere\n  via cloud backend"]
+```
+
+---
+
+## ⚙️ Technical System Architecture
+
+Internal communication and data flow between all system nodes.
 
 ```mermaid
 graph TD
-    %% Define Layers
-    subgraph Local Edge Environment
-        ESP32[ESP32 Hardware<br/>(Sensors & Controls)]
-        AI[AI Camera System<br/>(YOLO Model + predict.py)]
+    subgraph Hardware
+        ESP32["ESP32 - Sensors and Actuators"]
+        AI["AI Camera System - YOLO + predict.py"]
     end
 
-    subgraph Internet / Cloud
-        MQTT((MQTT Broker))
-        API[FastAPI Backend<br/>(lettu_backend)]
-        DB[(SQL Database)]
+    subgraph "Local Network via Access Point"
+        BACKEND["Local Backend Server - FastAPI + MQTT Broker + SQLite"]
     end
 
-    subgraph Client End
-        APP[Flutter Mobile App<br/>(Dashboard & Alerts)]
+    subgraph Internet
+        SYNC["Sync Engine - sync_engine.py"]
+        CLOUD["Cloud Backend Server - Render + Supabase"]
     end
 
-    %% Edge Connections via MQTT
-    ESP32 <==>|MQTT: lettuvault/sensors<br/>lettuvault/control| MQTT
-    AI <==>|MQTT: lettuvault/ai<br/>lettuvault/control| MQTT
+    subgraph Client
+        MOBILE["Mobile App - Flutter"]
+    end
 
-    %% Backend Connections
-    MQTT <==>|Pub/Sub Event Ingestion| API
-    API <==>|SQLAlchemy ORM + CRUD| DB
-
-    %% Mobile Connections via REST
-    APP <==>|REST HTTP/HTTPS<br/>JSON & JWT Auth| API
+    AI -->|MQTT: Detection results| BACKEND
+    ESP32 -->|MQTT: Sensor readings| BACKEND
+    BACKEND -->|MQTT: Control commands| ESP32
+    BACKEND -->|Reads local DB| SYNC
+    SYNC -->|HTTPS POST: Data sync| CLOUD
+    MOBILE <-->|REST API via Local AP| BACKEND
+    MOBILE <-->|REST API via Internet| CLOUD
 ```
 
-### Architecture Breakdown
-1. **Embedded/Hardware (`/embedded/` ESP32):** Reads live telemetry (Temperature, Humidity, Pressure) and publishes to the MQTT broker constantly. It also listens for configuration updates (setpoints) from the backend.
-2. **AI Edge Worker (`/ai_system/`):** A locally running Python script executing Computer Vision inference (YOLO) on a local camera feed. Publishes detected crop statuses and pest alerts to the MQTT broker.
-3. **Backend Gateway (`/backend/` FastAPI):** The central brain. It subscribes to the MQTT broker to ingest all hardware and AI telemetry into the relational database. It then exposes that data outwards via REST HTTP endpoints.
-4. **Mobile Client (`/mobile/` Flutter):** The user interface. It connects strictly to the backend via standard HTTP calls (GET/POST) utilizing JSON Web Tokens for security, completely abstracted away from the MQTT hardware layer.
+### Component Breakdown
+1. **ESP32 (`/embedded/`):** Reads live BME280 telemetry (Temp, Humidity, Pressure) and publishes to the MQTT broker. Listens for actuation commands from the backend to control the cooling system and LEDs.
+2. **AI Camera System (`/ai_system/`):** Runs offline YOLOv11 inference on a local camera feed. Uses a 3-second stability check to confirm detections before publishing results + Base64 image to the MQTT broker.
+3. **Local Backend Server (`/backend/`):** The central hub. Subscribes to MQTT to ingest all sensor and AI data into local SQLite. Exposes REST API for the mobile app over the local AP network.
+4. **Sync Engine (`sync_engine.py`):** Background worker that reads unsynced rows from local SQLite using watermark timestamps and POSTs them in batches to the cloud server. Uses dynamic backoff to burn down large backlogs fast.
+5. **Cloud Backend Server (`/cloud-server/`):** Deployed on Render, backed by Supabase PostgreSQL. Receives synced data, provides remote REST API access for the mobile app, and serves the public web dashboard.
+6. **Mobile App (`/mobile/`):** Flutter app that connects to the local backend (via AP) for real-time monitoring, and to the cloud backend (via internet) for remote historical access.
+
+---
+
+
+## 🔄 Full Lifecycle Data Flow
+
+This outlines exactly how data travels across all systems in LettuVault — from physical sensors to mobile access.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant ESP  as ESP32 Hardware
+    participant AI   as AI Camera System
+    participant BACK as Local Backend Server
+    participant SYNC as Sync Engine
+    participant CLOUD as Cloud Backend Server
+    participant APP  as Mobile App
+
+    note over ESP,AI: Data Collection
+    ESP->>BACK: MQTT — sensor readings (Temp/Hum/Pres)
+    loop Every 3 seconds until 3s stable
+        AI->>AI: YOLOv11 analyzes camera frame
+    end
+    AI->>BACK: MQTT — detection result + Base64 image
+
+    note over BACK: Storage
+    BACK->>BACK: Validate + save to Local SQLite DB
+    BACK->>ESP: MQTT — control commands (setpoints/actuation)
+
+    note over BACK,APP: Local Access via AP
+    APP->>BACK: REST API over local network (Wi-Fi AP)
+    BACK-->>APP: JSON response (readings, scans, config)
+
+    note over SYNC,CLOUD: Internet Data Sync
+    loop Every 60 seconds (Dynamic Backoff)
+        SYNC->>BACK: Read unsynced rows from local SQLite
+        SYNC->>CLOUD: POST /api/v1/sync over internet
+        CLOUD->>CLOUD: Insert into Supabase PostgreSQL
+    end
+
+    note over APP,CLOUD: Remote Access via Internet
+    APP->>CLOUD: REST API over internet (JWT Auth)
+    CLOUD-->>APP: Return historical records
+```
 
 ---
 
@@ -113,9 +183,15 @@ When running locally using `lettu_vault_start`, the system spins up everything a
     │                            ├── lettuvault/ai          │
     │                            └── lettuvault/sensors     │
     │                                                       │
-    └── starts ──────────────► [predict.py]   ─────────────┘
-                               AI Camera              (publishes)
-                               + YOLO Model
+    ├── starts ──────────────► [predict.py]   ─────────────┘
+    │                          AI Camera              (publishes)
+    │                          + YOLO Model
+    │
+    └── starts ──────────────► [sync_engine.py]
+                               Background Sync Worker
+                               Reads local DB every 60s
+                               POSTs batches ──────────────► Cloud Server (Render)
+                                                              └── Supabase PostgreSQL
 ```
 
 ---

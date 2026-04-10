@@ -1,23 +1,45 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
+import '../core/app_mode.dart';
+import '../core/secure_storage.dart';
 
-/// Lightweight HTTP wrapper that injects the X-API-KEY header on every request.
+/// Mode-aware HTTP wrapper.
 ///
-/// This is the single point of contact for all network calls.  All repositories
-/// should use this client instead of raw `http.get` / `http.post`.
+/// - Online mode  → calls Render cloud server with X-MOBILE-API-KEY
+/// - Offline mode → calls local Raspberry Pi backend with X-API-KEY
+///
+/// Automatically reads the active [appModeNotifier] value on each request,
+/// so switching modes mid-session takes effect immediately on the next poll.
 class ApiClient {
-  final Map<String, String> _headers = {
-    'Content-Type': 'application/json',
-    'X-API-KEY': kApiKey,
-  };
+  /// Build the correct base URL from the current app mode.
+  String get _baseUrl {
+    return appModeNotifier.value == AppMode.online
+        ? kCloudBaseUrl
+        : kLocalBaseUrl;
+  }
 
-  /// GET request to [endpoint] (e.g. '/internal-environment').
-  /// Returns the decoded JSON body.
+  /// Build the correct auth header from the current app mode and secure storage.
+  Future<Map<String, String>> _buildHeaders() async {
+    final isOnline = appModeNotifier.value == AppMode.online;
+    final apiKey = isOnline
+        ? (await SecureStorage.getMobileApiKey() ?? '')
+        : (await SecureStorage.getLocalApiKey() ?? '');
+
+    final headerName = isOnline ? 'X-MOBILE-API-KEY' : 'X-API-KEY';
+
+    return {
+      'Content-Type': 'application/json',
+      headerName: apiKey,
+    };
+  }
+
+  /// GET request to [endpoint] (e.g. '/sensor-readings').
   Future<dynamic> get(String endpoint) async {
-    final url = Uri.parse('$kBaseUrl$kApiPrefix$endpoint');
-    final response = await http.get(url, headers: _headers).timeout(
-      const Duration(seconds: 6),
+    final url = Uri.parse('$_baseUrl$kApiPrefix$endpoint');
+    final headers = await _buildHeaders();
+    final response = await http.get(url, headers: headers).timeout(
+      const Duration(seconds: 8),
     );
 
     if (response.statusCode == 200) {
@@ -31,12 +53,13 @@ class ApiClient {
 
   /// POST request to [endpoint] with a JSON [body].
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
-    final url = Uri.parse('$kBaseUrl$kApiPrefix$endpoint');
+    final url = Uri.parse('$_baseUrl$kApiPrefix$endpoint');
+    final headers = await _buildHeaders();
     final response = await http.post(
       url,
-      headers: _headers,
+      headers: headers,
       body: json.encode(body),
-    ).timeout(const Duration(seconds: 6));
+    ).timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return json.decode(response.body);

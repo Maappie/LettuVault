@@ -16,8 +16,10 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # Security: Used by Edge Vaults (Raspberry Pis) to authenticate sync requests
-    # This should be a long, random secret - NOT the same key as X_API_KEY
     CLOUD_SYNC_API_KEY: str = os.getenv("CLOUD_SYNC_API_KEY", "change-me-in-production")
+
+    # Separate key for the Flutter Mobile App (online mode)
+    CLOUD_MOBILE_API_KEY: str = os.getenv("CLOUD_MOBILE_API_KEY", "change-me-in-production")
 
     # Optional: JWT for the Mobile App to query this cloud server directly
     SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")

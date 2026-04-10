@@ -25,6 +25,8 @@ dependencies:
   wakelock_plus: ^1.5.1
   workmanager: ^0.9.0+3
   android_alarm_manager_plus: ^5.0.0
+  wifi_iot: ^0.3.19+1          # Wi-Fi AP connection for offline mode
+  flutter_secure_storage: ^9.2.4 # Encrypted storage for Pi credentials and API keys
 
 dev_dependencies:
   flutter_test:
