@@ -38,7 +38,6 @@ def startup_event():
     Base.metadata.create_all(bind=engine)
 
 
-@app.get("/", tags=["Health"])
 @app.get("/cloud-server-health", tags=["Health"], include_in_schema=False)
 def health_check():
     return {
@@ -46,6 +45,13 @@ def health_check():
         "version": settings.VERSION,
         "status": "Online",
     }
+
+
+@app.get("/", tags=["UI"], include_in_schema=False)
+@app.get("/home", tags=["UI"], include_in_schema=False)
+def get_home_dashboard():
+    template_path = os.path.join(os.path.dirname(__file__), "template", "home.html")
+    return FileResponse(template_path)
 
 
 from fastapi.responses import FileResponse
