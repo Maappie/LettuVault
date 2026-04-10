@@ -38,6 +38,7 @@ def startup_event():
 
 
 @app.get("/", tags=["Health"])
+@app.get("/cloud-server-health", tags=["Health"], include_in_schema=False)
 def health_check():
     return {
         "service": settings.PROJECT_NAME,
