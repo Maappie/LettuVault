@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_new_app/src/core/app_mode.dart';
 import 'package:my_new_app/src/core/constants.dart';
 import 'package:my_new_app/src/core/secure_storage.dart';
-import 'package:my_new_app/src/screens/splash_screen.dart';
+import 'package:my_new_app/features/splash/screens/splash_screen.dart';
 import 'package:my_new_app/features/setup/screens/setup_offline_screen.dart';
 import 'package:my_new_app/features/logs/screens/log_status_screen.dart';
 
