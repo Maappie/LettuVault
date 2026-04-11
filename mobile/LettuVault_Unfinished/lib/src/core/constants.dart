@@ -5,8 +5,8 @@
 
 // ── Offline Mode (Local Raspberry Pi AP) ──────────────────────────────────────
 // The backend server address when connected to the Pi's Access Point.
-// Update this if the Pi's AP assigns a different IP to itself.
-const String kLocalBaseUrl = 'http://192.168.68.144:8000';
+// 10.42.0.1 is the default gateway IP assigned by Linux NetworkManager Hotspots.
+const String kLocalBaseUrl = 'http://10.42.0.1:8000';
 
 // ── Online Mode (Render Cloud Server) ─────────────────────────────────────────
 // The public Render deployment URL. No IP needed — always the same domain.
@@ -22,7 +22,7 @@ const String kDefaultPiSsid = 'LettuVault-01';
 
 // ── Polling Intervals ────────────────────────────────────────────────────────
 // How often the dashboard polls for new readings (seconds).
-const int kDashboardPollIntervalSeconds = 5;
+const int kDashboardPollIntervalSeconds = 10;
 
 // ── Dynamic UI Tolerances ────────────────────────────────────────────────────
 // How far a sensor reading can drift from the target before the card turns red.

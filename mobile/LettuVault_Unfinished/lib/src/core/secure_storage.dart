@@ -1,10 +1,5 @@
-/// secure_storage.dart — Encrypted local storage for sensitive credentials.
-///
-/// Stores Pi AP credentials and API keys using flutter_secure_storage
-/// (backed by Android Keystore / iOS Keychain).
-/// This is the Flutter equivalent of a .env file for secrets.
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SecureStorage {
   static const _storage = FlutterSecureStorage(
@@ -12,48 +7,67 @@ class SecureStorage {
   );
 
   // ── Keys ──────────────────────────────────────────────────────────────────
-  static const _kPiSsid       = 'pi_ssid';
-  static const _kPiPassword   = 'pi_password';
-  static const _kMobileApiKey = 'mobile_api_key';
-  static const _kLocalApiKey  = 'local_api_key';
-  static const _kSetupDone    = 'offline_setup_done';
+  static const _kPiSsid       = 'pi_ssid_v2';
+  static const _kPiPassword   = 'pi_password_v2';
+  static const _kMobileApiKey = 'mobile_api_key_v2';
+  static const _kLocalApiKey  = 'local_api_key_v2';
+  static const _kSetupDone    = 'offline_setup_done_v2';
 
-  // ── Pi AP Credentials ─────────────────────────────────────────────────────
+  // ── Pi AP Credentials (Using SharedPreferences for high reliability on all ROMs) ──
   static Future<void> savePiCredentials({
     required String ssid,
     required String password,
   }) async {
-    await _storage.write(key: _kPiSsid, value: ssid);
-    await _storage.write(key: _kPiPassword, value: password);
-    await _storage.write(key: _kSetupDone, value: 'true');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPiSsid, ssid);
+    await prefs.setString(_kPiPassword, password);
+    await prefs.setBool(_kSetupDone, true);
   }
 
-  static Future<String?> getPiSsid() => _storage.read(key: _kPiSsid);
-  static Future<String?> getPiPassword() => _storage.read(key: _kPiPassword);
+  static Future<String?> getPiSsid() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kPiSsid);
+  }
+
+  static Future<String?> getPiPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kPiPassword);
+  }
+
   static Future<bool> isOfflineSetupDone() async {
-    final v = await _storage.read(key: _kSetupDone);
-    return v == 'true';
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kSetupDone) ?? false;
   }
 
   static Future<void> clearPiCredentials() async {
-    await _storage.delete(key: _kPiSsid);
-    await _storage.delete(key: _kPiPassword);
-    await _storage.delete(key: _kSetupDone);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kPiSsid);
+    await prefs.remove(_kPiPassword);
+    await prefs.remove(_kSetupDone);
   }
 
-  // ── API Keys ──────────────────────────────────────────────────────────────
-  /// Cloud mobile API key (used in Online mode) — X-MOBILE-API-KEY header
-  static Future<void> saveMobileApiKey(String key) =>
-      _storage.write(key: _kMobileApiKey, value: key);
-  static Future<String?> getMobileApiKey() => _storage.read(key: _kMobileApiKey);
+  // ── API Keys (Stored in SharedPreferences for consistency and persistence reliability) ──
+  static Future<void> saveMobileApiKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kMobileApiKey, key);
+  }
+  
+  static Future<String?> getMobileApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kMobileApiKey);
+  }
 
-  /// Local backend API key (used in Offline mode) — X-API-KEY header
-  static Future<void> saveLocalApiKey(String key) =>
-      _storage.write(key: _kLocalApiKey, value: key);
-  static Future<String?> getLocalApiKey() => _storage.read(key: _kLocalApiKey);
+  static Future<void> saveLocalApiKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLocalApiKey, key);
+  }
+  
+  static Future<String?> getLocalApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kLocalApiKey);
+  }
 
   // ── Seed defaults on first run ────────────────────────────────────────────
-  /// Call once at startup to pre-populate keys if they haven't been set yet.
   static Future<void> seedDefaultsIfNeeded() async {
     final mobileKey = await getMobileApiKey();
     if (mobileKey == null) {

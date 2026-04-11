@@ -39,25 +39,68 @@ class HomeScreen extends StatelessWidget {
             children: [
               // API connection status banner
               if (apiError != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cloud_off, color: Colors.redAccent, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          "Backend unreachable — showing cached data",
-                          style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.9), fontSize: 12),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.redAccent),
+                            SizedBox(width: 8),
+                            Text('Connection Error', style: TextStyle(fontSize: 16)),
+                          ],
                         ),
+                        content: SingleChildScrollView(
+                          child: SelectableText(
+                            apiError!,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
                       ),
-                    ],
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.cloud_off, color: Colors.redAccent, size: 18),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                "Backend unreachable — tap for details",
+                                style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: Colors.redAccent, size: 16),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          apiError!.length > 120 ? '${apiError!.substring(0, 120)}…' : apiError!,
+                          style: TextStyle(
+                            color: Colors.redAccent.withValues(alpha: 0.8),
+                            fontSize: 10,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 

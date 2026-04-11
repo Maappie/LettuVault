@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../core/secure_storage.dart';
 
@@ -18,13 +19,43 @@ class _SetupOfflineScreenState extends State<SetupOfflineScreen> {
   final _formKey = GlobalKey<FormState>();
   final _ssidCtrl = TextEditingController(text: kDefaultPiSsid);
   final _passCtrl = TextEditingController();
+  final _ipCtrl   = TextEditingController();
   bool _obscure = true;
-  bool _saving = false;
+  bool _saving  = false;
+  bool _showIpField = false;
+
+  bool _isLoading    = true;
+  bool _isConfigured = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExisting();
+  }
+
+  Future<void> _loadExisting() async {
+    final ssid = await SecureStorage.getPiSsid();
+    final pass = await SecureStorage.getPiPassword();
+    final prefs = await SharedPreferences.getInstance();
+    final savedUrl = prefs.getString('offline_base_url') ?? '';
+    if (savedUrl.isNotEmpty) {
+      final uri = Uri.tryParse(savedUrl);
+      if (uri != null) _ipCtrl.text = uri.host;
+    }
+    if (ssid != null && ssid.isNotEmpty && pass != null) {
+      _ssidCtrl.text = ssid;
+      _passCtrl.text = pass;
+      setState(() { _isConfigured = true; _isLoading = false; });
+    } else {
+      setState(() { _isLoading = false; });
+    }
+  }
 
   @override
   void dispose() {
     _ssidCtrl.dispose();
     _passCtrl.dispose();
+    _ipCtrl.dispose();
     super.dispose();
   }
 
@@ -35,223 +66,372 @@ class _SetupOfflineScreenState extends State<SetupOfflineScreen> {
       ssid: _ssidCtrl.text.trim(),
       password: _passCtrl.text,
     );
+    // If user entered a manual IP, store it; otherwise let gateway auto-detect run
+    final overrideIp = _ipCtrl.text.trim();
+    if (overrideIp.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('offline_base_url', 'http://$overrideIp:8000');
+    }
     setState(() => _saving = false);
     widget.onDone();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0A150C) : const Color(0xFFF6F8FA);
+    final cardColor = isDark ? const Color(0xFF0D2010) : Colors.white;
+    final primaryGreen = isDark ? const Color(0xFF4ADE80) : Colors.green.shade600;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subColor = isDark ? const Color(0xFF9CA3AF) : Colors.black54;
+    final borderColor = isDark ? const Color(0xFF1E3A22) : Colors.green.shade200;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: Center(child: CircularProgressIndicator(color: primaryGreen)),
+      );
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A150C),
+      backgroundColor: bgColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
+          child: _isConfigured 
+            ? _buildConfiguredView(isDark, primaryGreen, textColor, subColor, cardColor, borderColor)
+            : _buildFormView(isDark, primaryGreen, textColor, subColor, cardColor, borderColor),
+        ),
+      ),
+    );
+  }
 
-                // ── Header ─────────────────────────────────────────────────
-                Row(
+  Widget _buildConfiguredView(bool isDark, Color primaryGreen, Color textColor, Color subColor, Color cardColor, Color borderColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 60),
+        Icon(Icons.wifi_protected_setup, color: primaryGreen, size: 80),
+        const SizedBox(height: 24),
+        Text(
+          "Offline Mode Configured",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "Your phone is currently set to connect to:",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14, color: subColor),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.router, color: primaryGreen, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                _ssidCtrl.text,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: primaryGreen),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 48),
+        SizedBox(
+          height: 52,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.edit, size: 20),
+            label: const Text('Change Configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryGreen.withValues(alpha: 0.15),
+              foregroundColor: primaryGreen,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: () => setState(() => _isConfigured = false),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 52,
+          child: ElevatedButton(
+            onPressed: widget.onDone,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryGreen,
+              foregroundColor: isDark ? const Color(0xFF0A150C) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Back to Dashboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormView(bool isDark, Color primaryGreen, Color textColor, Color subColor, Color cardColor, Color borderColor) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 24),
+
+          // ── Header ─────────────────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: primaryGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: primaryGreen.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Icon(Icons.wifi_find, color: primaryGreen, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4ADE80).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF4ADE80).withValues(alpha: 0.3),
-                        ),
+                    Text(
+                      'App Config',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
                       ),
-                      child: const Icon(Icons.wifi_find,
-                          color: Color(0xFF4ADE80), size: 28),
                     ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Set Up Offline Mode',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Connect to the LettuVault Pi AP',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF9CA3AF),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Set AP connection',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: subColor,
                       ),
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
 
-                const SizedBox(height: 36),
+          const SizedBox(height: 36),
 
-                // ── Info card ─────────────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4ADE80).withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: const Color(0xFF4ADE80).withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline,
-                          color: Color(0xFF4ADE80), size: 18),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Offline mode connects your phone directly to the '
-                          'Raspberry Pi\'s Wi-Fi Access Point for real-time '
-                          'local monitoring — no internet required.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF9CA3AF),
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // ── SSID field ────────────────────────────────────────────
-                _fieldLabel('Wi-Fi Network Name (SSID)'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _ssidCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration(
-                    hint: 'e.g. LettuVault-01',
-                    icon: Icons.router,
-                  ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Enter the Pi SSID' : null,
-                ),
-
-                const SizedBox(height: 20),
-
-                // ── Password field ────────────────────────────────────────
-                _fieldLabel('Wi-Fi Password'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _passCtrl,
-                  obscureText: _obscure,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration(
-                    hint: 'Enter password',
-                    icon: Icons.lock_outline,
-                  ).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: const Color(0xFF6B7280),
-                      ),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Enter the Wi-Fi password' : null,
-                ),
-
-                const SizedBox(height: 40),
-
-                // ── Save button ───────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4ADE80),
-                      foregroundColor: const Color(0xFF0A150C),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Color(0xFF0A150C)),
-                          )
-                        : const Text(
-                            'Save & Continue',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Skip button ───────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: TextButton(
-                    onPressed: widget.onDone,
-                    child: const Text(
-                      'Skip — stay in Online mode',
-                      style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+          // ── Info card ─────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: primaryGreen.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: primaryGreen.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: primaryGreen, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Offline mode connects your phone directly to the '
+                    'Raspberry Pi\'s Wi-Fi Access Point for real-time '
+                    'local monitoring — no internet required.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: subColor,
+                      height: 1.5,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+
+          const SizedBox(height: 32),
+
+          // ── SSID field ────────────────────────────────────────────
+          _fieldLabel('Wi-Fi Network Name (SSID)', primaryGreen, isDark),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _ssidCtrl,
+            style: TextStyle(color: textColor),
+            decoration: _inputDecoration(
+              hint: 'e.g. LettuVault-01',
+              icon: Icons.router,
+              isDark: isDark,
+              primaryGreen: primaryGreen,
+              cardColor: cardColor,
+              borderColor: borderColor,
+            ),
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Enter the Pi SSID' : null,
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Password field ────────────────────────────────────────
+          _fieldLabel('Wi-Fi Password', primaryGreen, isDark),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _passCtrl,
+            obscureText: _obscure,
+            style: TextStyle(color: textColor),
+            decoration: _inputDecoration(
+              hint: 'Enter password',
+              icon: Icons.lock_outline,
+              isDark: isDark,
+              primaryGreen: primaryGreen,
+              cardColor: cardColor,
+              borderColor: borderColor,
+            ).copyWith(
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscure ? Icons.visibility_off : Icons.visibility,
+                  color: subColor,
+                ),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+            validator: (v) =>
+                v == null || v.isEmpty ? 'Enter the Wi-Fi password' : null,
+          ),
+
+          // ── Backend IP override (optional, for laptop testing) ────
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => setState(() => _showIpField = !_showIpField),
+            child: Row(
+              children: [
+                Icon(Icons.tune, size: 14, color: subColor),
+                const SizedBox(width: 6),
+                Text(
+                  'Backend IP Override (optional)',
+                  style: TextStyle(fontSize: 12, color: subColor, decoration: TextDecoration.underline),
+                ),
+                const SizedBox(width: 4),
+                Icon(_showIpField ? Icons.expand_less : Icons.expand_more, size: 14, color: subColor),
+              ],
+            ),
+          ),
+          if (_showIpField) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Leave blank to auto-detect (recommended for Pi). '  
+              'Only fill this if auto-detect fails — e.g. enter your laptop\'s Wi-Fi IP like 192.168.68.144.',
+              style: TextStyle(fontSize: 11, color: subColor, height: 1.4),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _ipCtrl,
+              style: TextStyle(color: textColor),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: _inputDecoration(
+                hint: 'e.g. 192.168.68.144  (blank = auto)',
+                icon: Icons.dns_outlined,
+                isDark: isDark,
+                primaryGreen: primaryGreen,
+                cardColor: cardColor,
+                borderColor: borderColor,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 40),
+
+          // ── Save button ───────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryGreen,
+                foregroundColor: isDark ? const Color(0xFF0A150C) : Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _saving
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: isDark ? const Color(0xFF0A150C) : Colors.white),
+                    )
+                  : const Text(
+                      'Save & Continue',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Skip/Back button ──────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: TextButton(
+              onPressed: widget.onDone,
+              child: Text(
+                _ssidCtrl.text == kDefaultPiSsid && _passCtrl.text.isEmpty
+                    ? 'Skip — stay in Online mode'
+                    : 'Cancel',
+                style: TextStyle(color: subColor, fontSize: 14),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _fieldLabel(String text) => Text(
+  Widget _fieldLabel(String text, Color primaryGreen, bool isDark) => Text(
         text,
-        style: const TextStyle(
-          color: Color(0xFFD1FAE5),
+        style: TextStyle(
+          color: isDark ? const Color(0xFFD1FAE5) : primaryGreen,
           fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
       );
 
-  InputDecoration _inputDecoration(
-          {required String hint, required IconData icon}) =>
+  InputDecoration _inputDecoration({
+    required String hint,
+    required IconData icon,
+    required bool isDark,
+    required Color primaryGreen,
+    required Color cardColor,
+    required Color borderColor,
+  }) =>
       InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFF6B7280)),
-        prefixIcon: Icon(icon, color: const Color(0xFF4ADE80), size: 20),
+        hintStyle: TextStyle(color: isDark ? const Color(0xFF6B7280) : Colors.black38),
+        prefixIcon: Icon(icon, color: primaryGreen, size: 20),
         filled: true,
-        fillColor: const Color(0xFF0D2010),
+        fillColor: cardColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: Color(0xFF1E3A22)),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: Color(0xFF1E3A22)),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: Color(0xFF4ADE80), width: 1.5),
+          borderSide: BorderSide(color: primaryGreen, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

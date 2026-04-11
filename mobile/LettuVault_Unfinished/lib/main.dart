@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async'; // Completer, TimeoutException
 import 'dart:io';
 import 'dart:math';
 
@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wifi_iot/wifi_iot.dart';
+import 'package:http/http.dart' as http;
 
 import 'src/models/sensor_reading.dart';
 import 'src/screens/home_screen.dart';
@@ -99,6 +100,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
   bool _showOfflineSetup = false;
   // Mode-switching state
   bool _isSwitchingMode = false;
+  bool _cancelConnection = false;
   String? _modeError;
 
   double tempThresholdLow = 18.0; 
@@ -168,6 +170,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     } catch (_) {}
     await _loadSavedThresholds();
     await _loadSavedTheme();
+    await SecureStorage.seedDefaultsIfNeeded();
 
     // Start real API polling (runs alongside the background service)
     _startApiPolling();
@@ -176,6 +179,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     try {
       FlutterBackgroundService().on('sensorReading').listen((data) {
         if (data == null || !mounted) return;
+        
+        // Prevent injecting local background readings if we are actively polling the Cloud
+        if (appModeNotifier.value == AppMode.online) return;
+
         injectSensorReadings(
           temp: (data['temperature'] as num?)?.toDouble(),
           hum:  (data['humidity']   as num?)?.toDouble(),
@@ -186,11 +193,32 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       debugPrint('[BG] Could not subscribe to background readings: $e');
     }
 
-    // Check if offline setup has ever been completed — show it if not
+    // Check if offline setup has ever been completed — show it if not.
+    // We check whether the SSID credential actually exists, not just the flag,
+    // so that even if the flag gets cleared the app behaves correctly.
     final setupDone = await SecureStorage.isOfflineSetupDone();
-    if (!setupDone && mounted) {
+    final savedSsid = await SecureStorage.getPiSsid();
+    debugPrint('[STARTUP] setupDone=$setupDone  savedSsid=$savedSsid');
+
+    // Show setup only if BOTH the flag is missing AND there's no saved SSID
+    if (!setupDone && (savedSsid == null || savedSsid.isEmpty) && mounted) {
       setState(() { _isLoading = false; _showOfflineSetup = true; });
       return;
+    }
+
+    // If we have credentials but the flag got wiped, restore it
+    if (savedSsid != null && savedSsid.isNotEmpty && !setupDone) {
+      debugPrint('[STARTUP] Restoring setupDone flag from existing credentials');
+      final savedPass = await SecureStorage.getPiPassword() ?? '';
+      await SecureStorage.savePiCredentials(ssid: savedSsid, password: savedPass);
+    }
+
+    // Restore the last-used connection mode (online/offline) across restarts
+    final prefs = await SharedPreferences.getInstance();
+    final savedMode = prefs.getString('app_mode');
+    if (savedMode == 'offline') {
+      appModeNotifier.value = AppMode.offline;
+      debugPrint('[STARTUP] Restored mode: offline');
     }
 
     if (!mounted) return;
@@ -669,18 +697,57 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         Scaffold(
           drawer: _buildAppDrawer(context),
           body: screens[_selectedIndex],
-          bottomNavigationBar: BottomNavigationBar(
-            backgroundColor: Theme.of(context).cardColor,
-            currentIndex: _selectedIndex,
-            onTap: (i) => setState(() => _selectedIndex = i),
-            selectedItemColor: Theme.of(context).colorScheme.primary,
-            unselectedItemColor: Colors.grey.shade600,
-            type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-              BottomNavigationBarItem(icon: Icon(Icons.thermostat), label: "Temp"),
-              BottomNavigationBarItem(icon: Icon(Icons.water_drop), label: "Humid"),
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Mode indicator strip
+              ValueListenableBuilder<AppMode>(
+                valueListenable: appModeNotifier,
+                builder: (context, mode, _) {
+                  final isOffline = mode == AppMode.offline;
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    color: isOffline
+                        ? Colors.orange.withValues(alpha: 0.12)
+                        : Colors.blue.withValues(alpha: 0.08),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isOffline ? Icons.wifi : Icons.cloud,
+                          size: 12,
+                          color: isOffline ? Colors.orange : Colors.blue,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          isOffline ? 'Local' : 'Remote',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isOffline ? Colors.orange : Colors.blue,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              BottomNavigationBar(
+                backgroundColor: Theme.of(context).cardColor,
+                currentIndex: _selectedIndex,
+                onTap: (i) => setState(() => _selectedIndex = i),
+                selectedItemColor: Theme.of(context).colorScheme.primary,
+                unselectedItemColor: Colors.grey.shade600,
+                type: BottomNavigationBarType.fixed,
+                items: const [
+                  BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+                  BottomNavigationBarItem(icon: Icon(Icons.thermostat), label: "Temp"),
+                  BottomNavigationBarItem(icon: Icon(Icons.water_drop), label: "Humid"),
               BottomNavigationBarItem(icon: Icon(Icons.compress), label: "Pres"),
+                ],
+              ),
             ],
           ),
         ),
@@ -693,8 +760,24 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         if (_isSwitchingMode)
           Positioned.fill(
             child: Container(
-              color: Colors.black.withValues(alpha: 0.75),
-              child: const Center(child: SplashScreen()),
+              color: Colors.black.withValues(alpha: 0.85),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SplashScreen(),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    label: const Text('Cancel Connection', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                    onPressed: () {
+                      setState(() {
+                        _cancelConnection = true;
+                        _isSwitchingMode = false;
+                      });
+                    },
+                  )
+                ],
+              ),
             ),
           ),
       ],
@@ -704,7 +787,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
   // ── Mode Switching Logic ─────────────────────────────────────────────────
 
   Future<void> _switchToOfflineMode() async {
-    setState(() { _isSwitchingMode = true; _modeError = null; });
+    setState(() { _isSwitchingMode = true; _modeError = null; _cancelConnection = false; });
     try {
       final ssid = await SecureStorage.getPiSsid();
       final pass = await SecureStorage.getPiPassword();
@@ -724,14 +807,65 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       );
 
       if (!mounted) return;
+      if (_cancelConnection) return;
+
       if (connected == true) {
+        // CRITICAL FIX: Force Android to route our app's traffic through this Wi-Fi
+        // even though it doesn't have internet. This prevents the OS from
+        // secretly sending our API calls out over 4G Cellular data.
+        await WiFiForIoTPlugin.forceWifiUsage(true);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          // If the user set a manual IP override in the setup screen, respect it.
+          // Only run gateway auto-detect when no override is stored.
+          final existingUrl = prefs.getString('offline_base_url') ?? '';
+          if (existingUrl.isNotEmpty) {
+            debugPrint('[OFFLINE] Using stored url: $existingUrl (skipping auto-detect)');
+          } else {
+            // Gateway heuristic: phone's IP x.x.x.Y → x.x.x.1 = gateway/backend
+            // Only RFC 1918 private addresses — skip VPN/tunnel interfaces.
+            String? gateway;
+            bool isPrivate(String ip) {
+              if (ip.startsWith('192.168.')) return true;
+              if (ip.startsWith('10.')) return true;
+              final parts = ip.split('.');
+              if (parts.length == 4 && parts[0] == '172') {
+                final second = int.tryParse(parts[1]) ?? 0;
+                if (second >= 16 && second <= 31) return true;
+              }
+              return false;
+            }
+            for (var iface in await NetworkInterface.list()) {
+              for (var addr in iface.addresses) {
+                if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback && isPrivate(addr.address)) {
+                  final parts = addr.address.split('.');
+                  if (parts.length == 4) {
+                    parts[3] = '1';
+                    gateway = parts.join('.');
+                    debugPrint('[OFFLINE] Phone IP: ${addr.address} → Gateway: $gateway');
+                    break;
+                  }
+                }
+              }
+              if (gateway != null) break;
+            }
+            if (gateway != null) {
+              await prefs.setString('offline_base_url', 'http://$gateway:8000');
+              debugPrint('[OFFLINE] Auto-detected & stored: http://$gateway:8000');
+            }
+          }
+        } catch (e) {
+          debugPrint('[OFFLINE] Gateway detection error: $e');
+        }
+
         appModeNotifier.value = AppMode.offline;
+        SharedPreferences.getInstance().then((p) => p.setString('app_mode', 'offline'));
         _startApiPolling();
         setState(() { _isSwitchingMode = false; _modeError = null; });
       } else {
         setState(() {
           _isSwitchingMode = false;
-          _modeError = 'Could not connect to LettuVault AP. Make sure the Pi is powered on and nearby.';
+          _modeError = 'Could not connect. Ensure the LettuVault AP is nearby and the password is correct.';
         });
         _showModeErrorSnackbar();
       }
@@ -746,7 +880,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
   }
 
   void _switchToOnlineMode() {
+    // Release the Wi-Fi route lock so we can use Cellular/Internet again
+    WiFiForIoTPlugin.forceWifiUsage(false).catchError((_) {});
+    // Disconnect from the Pi/hotspot AP so the phone returns to normal Wi-Fi
+    WiFiForIoTPlugin.disconnect().catchError((e) {
+      debugPrint('[ONLINE] disconnect error (ignored): $e');
+    });
     appModeNotifier.value = AppMode.online;
+    SharedPreferences.getInstance().then((p) => p.setString('app_mode', 'online'));
     _startApiPolling();
     setState(() { _modeError = null; });
   }
@@ -904,6 +1045,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
                             );
                           },
                         ),
+                        
+                        // ── Offline Mode Settings Button ───────────────────
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                          leading: Icon(Icons.router, color: Theme.of(context).colorScheme.primary, size: 22),
+                          title: const Text('Offline Mode Setting', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: const Text('Update Raspberry Pi Wi-Fi credentials', style: TextStyle(fontSize: 11)),
+                          trailing: const Icon(Icons.chevron_right, size: 20),
+                          onTap: () {
+                            Navigator.of(context).pop(); // Close drawer
+                            setState(() {
+                              _showOfflineSetup = true; // Show the credentials screen
+                            });
+                          },
+                        ),
+
                         Divider(color: Theme.of(context).dividerColor),
                         _buildAlertSwitch(),
                         _buildThemeSwitch(),

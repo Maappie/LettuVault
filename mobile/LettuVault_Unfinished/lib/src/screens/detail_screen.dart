@@ -236,13 +236,16 @@ class _DetailScreenState extends State<DetailScreen> {
     final double bottomPad = MediaQuery.of(context).padding.bottom + 16.0;
 
     return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.only(left: 14.0, right: 14.0, top: 8.0, bottom: bottomPad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            buildTopBar(context, widget.title),
-            const SizedBox(height: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          buildTopBar(context, widget.title),
+          Padding(
+            padding: EdgeInsets.only(left: 14.0, right: 14.0, bottom: bottomPad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 12),
 
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 6.0),
@@ -442,7 +445,9 @@ Row(
           ],
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 
   // // keep the small metric helper for consistency with main UI

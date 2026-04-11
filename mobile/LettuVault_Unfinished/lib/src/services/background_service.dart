@@ -266,8 +266,9 @@ Future<void> _pollAndNotify(
 
   try {
     // ── 1. Fetch the latest sensor reading ──────────────────────────────────
+    final fallbackUrl = prefs.getString('offline_base_url') ?? kLocalBaseUrl;
     final readingResp = await http.get(
-      Uri.parse('$kLocalBaseUrl$kApiPrefix/internal-environment?limit=1&order=desc'),
+      Uri.parse('$fallbackUrl$kApiPrefix/internal-environment?limit=1&order=desc'),
       headers: {'X-API-KEY': 'lettuce-master-key-2024'},
     ).timeout(const Duration(seconds: 10));
 

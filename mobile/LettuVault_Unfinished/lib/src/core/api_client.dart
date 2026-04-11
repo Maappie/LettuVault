@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 import '../core/app_mode.dart';
 import '../core/secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Mode-aware HTTP wrapper.
 ///
@@ -13,10 +14,12 @@ import '../core/secure_storage.dart';
 /// so switching modes mid-session takes effect immediately on the next poll.
 class ApiClient {
   /// Build the correct base URL from the current app mode.
-  String get _baseUrl {
-    return appModeNotifier.value == AppMode.online
-        ? kCloudBaseUrl
-        : kLocalBaseUrl;
+  Future<String> get _baseUrl async {
+    if (appModeNotifier.value == AppMode.online) {
+      return kCloudBaseUrl;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('offline_base_url') ?? kLocalBaseUrl;
   }
 
   /// Build the correct auth header from the current app mode and secure storage.
@@ -36,7 +39,8 @@ class ApiClient {
 
   /// GET request to [endpoint] (e.g. '/sensor-readings').
   Future<dynamic> get(String endpoint) async {
-    final url = Uri.parse('$_baseUrl$kApiPrefix$endpoint');
+    final base = await _baseUrl;
+    final url = Uri.parse('$base$kApiPrefix$endpoint');
     final headers = await _buildHeaders();
     final response = await http.get(url, headers: headers).timeout(
       const Duration(seconds: 8),
@@ -53,7 +57,8 @@ class ApiClient {
 
   /// POST request to [endpoint] with a JSON [body].
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
-    final url = Uri.parse('$_baseUrl$kApiPrefix$endpoint');
+    final base = await _baseUrl;
+    final url = Uri.parse('$base$kApiPrefix$endpoint');
     final headers = await _buildHeaders();
     final response = await http.post(
       url,

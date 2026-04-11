@@ -18,7 +18,6 @@ Widget buildTopBar(BuildContext context, String t) => Container(
             icon: Icon(Icons.menu_rounded, color: Theme.of(context).colorScheme.onSurface, size: 28),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
-          // Make title flexible so it won't overflow on narrow screens
           Expanded(
             child: Text(
               t,
@@ -32,13 +31,12 @@ Widget buildTopBar(BuildContext context, String t) => Container(
               ),
             ),
           ),
-          const CircleAvatar(
-            radius: 20,
-            backgroundImage: AssetImage('assets/profile.jpg'),
-          ),
+          // Spacer to keep title centered (matches IconButton width)
+          const SizedBox(width: 48),
         ],
       ),
     );
+
 
 // greenLow/greenHigh: the inner ±tolerance safe zone boundary
 // redLow/redHigh: the outer alert threshold boundary (orange is between these and green)
