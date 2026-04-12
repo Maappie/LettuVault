@@ -201,6 +201,7 @@ def build_config_payload(rows: list[dict]) -> list[dict]:
     return [
         {
             "vault_id":    VAULT_ID,
+            "user_email":  VAULT_USER_EMAIL or None,
             "temperature": r.get("temperature"),
             "humidity":    r.get("humidity"),
             "pressure":    r.get("pressure"),

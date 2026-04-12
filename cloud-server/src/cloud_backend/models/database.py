@@ -69,6 +69,7 @@ class CloudSystemConfig(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     vault_id         = Column(String, nullable=False, index=True)
+    user_email       = Column(String, nullable=True, index=True)
     temperature      = Column(Float, nullable=True)
     humidity         = Column(Float, nullable=True)
     pressure         = Column(Float, nullable=True)

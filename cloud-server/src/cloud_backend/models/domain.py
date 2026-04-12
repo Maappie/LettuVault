@@ -44,6 +44,7 @@ class SyncAIProduceScan(BaseModel):
 class SyncSystemConfig(BaseModel):
     """One system configuration update from a local vault."""
     vault_id: str
+    user_email: Optional[str] = None
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     pressure: Optional[float] = None

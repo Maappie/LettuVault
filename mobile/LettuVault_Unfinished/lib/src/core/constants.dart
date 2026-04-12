@@ -41,11 +41,11 @@ const double kPresMaxDeviation = 100.0;
 
 // ── Developer Mode ──────────────────────────────────────────────────────────
 // Set this to true to see raw network exceptions in the UI instead of user-friendly errors.
-const bool kDevMode = false;
+const bool kDevMode = true;
 
 // ── Onboarding: Home Wi-Fi Step ───────────────────────────────────────
 // true  → Home Wi-Fi step is mandatory. Skip button is hidden.
 //         Use for production releases where cloud sync is required.
 // false → Home Wi-Fi step shows a 'Skip for now' button.
 //         Use during laptop/development when Pi is not yet on a real home router.
-const bool kHomeWifiStepEnabled = true;
+const bool kHomeWifiStepEnabled = false;
