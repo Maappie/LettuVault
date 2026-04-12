@@ -11,6 +11,7 @@ import 'package:my_new_app/src/core/secure_storage.dart';
 import 'package:my_new_app/features/splash/screens/splash_screen.dart';
 import 'package:my_new_app/features/setup/screens/setup_offline_screen.dart';
 import 'package:my_new_app/features/logs/screens/log_status_screen.dart';
+import 'package:my_new_app/features/onboarding/screens/onboarding_flow_screen.dart';
 
 import 'package:my_new_app/features/dashboard/screens/dashboard_screen.dart';
 import 'package:my_new_app/features/settings/screens/settings_drawer.dart';
@@ -35,16 +36,17 @@ import 'package:my_new_app/features/detail/screens/sensor_detail_screen.dart';
 class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key});
 
-  static final GlobalKey<_MainNavigatorState> navKey =
-      GlobalKey<_MainNavigatorState>();
+  static final GlobalKey<MainNavigatorState> navKey =
+      GlobalKey<MainNavigatorState>();
 
   @override
-  State<MainNavigator> createState() => _MainNavigatorState();
+  State<MainNavigator> createState() => MainNavigatorState();
 }
 
-class _MainNavigatorState extends State<MainNavigator> {
+class MainNavigatorState extends State<MainNavigator> {
   int _selectedIndex = 0;
   bool _isLoading    = true;
+  bool _showOnboarding   = false;
   bool _showOfflineSetup = false;
   bool _isSwitchingMode  = false;
   bool _cancelConnection = false;
@@ -94,17 +96,11 @@ class _MainNavigatorState extends State<MainNavigator> {
       debugPrint('[BG] Subscribe error: $e');
     }
 
-    // Check offline setup completion
-    final setupDone = await SecureStorage.isOfflineSetupDone();
-    final savedSsid = await SecureStorage.getPiSsid();
-    if (!setupDone && (savedSsid == null || savedSsid.isEmpty) && mounted) {
-      setState(() { _isLoading = false; _showOfflineSetup = true; });
+    // Check onboarding completion — first-run wizard replaces old setup check
+    final onboardingDone = await SecureStorage.isOnboardingDone();
+    if (!onboardingDone && mounted) {
+      setState(() { _isLoading = false; _showOnboarding = true; });
       return;
-    }
-
-    if (savedSsid != null && savedSsid.isNotEmpty && !setupDone) {
-      final savedPass = await SecureStorage.getPiPassword() ?? '';
-      await SecureStorage.savePiCredentials(ssid: savedSsid, password: savedPass);
     }
 
     // Restore persisted mode
@@ -204,7 +200,16 @@ class _MainNavigatorState extends State<MainNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    // First-time setup overlay
+    // First-time onboarding overlay
+    if (_showOnboarding) {
+      return OnboardingFlowScreen(onComplete: () {
+        setState(() => _showOnboarding = false);
+        _polling.start();
+        _promptAutoStart();
+      });
+    }
+
+    // Re-configure offline credentials (from Settings drawer)
     if (_showOfflineSetup) {
       return SetupOfflineScreen(onDone: () {
         setState(() => _showOfflineSetup = false);
@@ -263,7 +268,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   }
 
   List<Widget> _buildScreens(SensorState s) {
-    double _calcDanger(double current, double target, double tol, double maxDev) {
+    double calcDanger(double current, double target, double tol, double maxDev) {
       final diff = (current - target).abs();
       if (diff <= tol) return 0.0;
       if (diff >= maxDev) return 1.0;
@@ -277,9 +282,9 @@ class _MainNavigatorState extends State<MainNavigator> {
         trendT: s.temp - s.targetTemp,
         trendH: s.hum  - s.targetHum,
         trendP: s.pres - s.targetPres,
-        tempDanger: _calcDanger(s.temp, s.targetTemp, kTempTolerance, kTempMaxDeviation),
-        humDanger:  _calcDanger(s.hum,  s.targetHum,  kHumTolerance,  kHumMaxDeviation),
-        presDanger: _calcDanger(s.pres, s.targetPres, kPresTolerance, kPresMaxDeviation),
+        tempDanger: calcDanger(s.temp, s.targetTemp, kTempTolerance, kTempMaxDeviation),
+        humDanger:  calcDanger(s.hum,  s.targetHum,  kHumTolerance,  kHumMaxDeviation),
+        presDanger: calcDanger(s.pres, s.targetPres, kPresTolerance, kPresMaxDeviation),
         apiError:   s.apiError,
         apiPolling: true,
       ),

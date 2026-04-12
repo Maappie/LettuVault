@@ -16,7 +16,6 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _rotation;
-  late final Animation<double> _fadeIn;
 
   @override
   void initState() {
@@ -27,7 +26,6 @@ class _SplashScreenState extends State<SplashScreen>
     )..repeat();
 
     _rotation = Tween<double>(begin: 0, end: 2 * pi).animate(_ctrl);
-    _fadeIn = CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.4));
   }
 
   @override
@@ -85,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen>
                           width: 80,
                           height: 80,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
+                          errorBuilder: (context, error, stackTrace) => const Icon(
                             Icons.eco,
                             color: Color(0xFF4ADE80),
                             size: 48,
@@ -171,7 +169,7 @@ class _LoadingDots extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
-      builder: (_, __) {
+      builder: (context, child) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {

@@ -55,7 +55,7 @@ void showAppAboutDialog(BuildContext context) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
           child: const Text('Close'),
         ),
       ],

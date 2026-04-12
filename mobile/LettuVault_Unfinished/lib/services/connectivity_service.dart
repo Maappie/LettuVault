@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wifi_iot/wifi_iot.dart';
 
 import 'package:my_new_app/src/core/app_mode.dart';
+import 'package:my_new_app/src/core/constants.dart';
 import 'package:my_new_app/src/core/secure_storage.dart';
 
 /// ConnectivityService — manages switching between Online and Offline modes.
@@ -20,10 +21,11 @@ class ConnectivityService {
 
   Future<void> switchToOnline() async {
     // Release Wi-Fi route lock so Android can use Cellular/Internet again
-    WiFiForIoTPlugin.forceWifiUsage(false).catchError((_) {});
+    WiFiForIoTPlugin.forceWifiUsage(false).catchError((_) => false);
     // Disconnect from Pi/hotspot AP
     WiFiForIoTPlugin.disconnect().catchError((e) {
       debugPrint('[Connectivity] disconnect error (ignored): $e');
+      return false;
     });
     appModeNotifier.value = AppMode.online;
     final prefs = await SharedPreferences.getInstance();
@@ -69,7 +71,9 @@ class ConnectivityService {
         return 'Could not connect. Ensure the LettuVault AP is nearby and the password is correct.';
       }
     } catch (e) {
-      return 'Connection error: $e';
+      return kDevMode 
+          ? "[DEV ERROR] WiFi connection exception: $e" 
+          : 'A networking error occurred while attempting to connect.';
     }
   }
 

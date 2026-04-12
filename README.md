@@ -212,7 +212,25 @@ db-upgrade
 
 ---
 
-## Running the System
+## 🔧 Environment Setup & Developer Toggles
+
+When moving between active laptop testing and deployment on the physical hardware Raspberry Pi, you MUST update the parameters in `.env` and the mobile app:
+
+### 1. Root `.env` (Backend / System Logic)
+| Flag | What it does | Dev/Test Setting | Production/Raspberry Pi |
+|---|---|---|---|
+| `IS_PRODUCTION` | Toggles actual OS-level commands (e.g. `nmcli` Wi-Fi connects). | `false` | `true` |
+| `CLOUD_SERVER_LOCAL` | Tells the TUI to auto-start the local `cloud-server` on port `8001`. | `true` | `false` |
+
+### 2. Mobile App Config (`mobile/LettuVault_Unfinished/lib/src/core/constants.dart`)
+| Constant Name | What it does | Dev/Test Setting | Production Release |
+|---|---|---|---|
+| `kDevMode` | Splits API errors. True shows raw stack traces (e.g. `SocketException 101`). False shows user-friendly text. | `true` | `false` |
+| `kCloudBaseUrl` | The endpoint the app hits when toggled to "Online Mode" or during cloud auth. | Phone: `http://192.168.x.x:8001`<br>Emu: `http://10.0.2.2:8001` | `https://lettuvault.onrender.com` |
+
+---
+
+## 🚀 Running the System
 
 ```powershell
 lettu_vault_start

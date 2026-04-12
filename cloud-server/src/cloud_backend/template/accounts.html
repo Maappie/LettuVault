@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounts — LettuVault Cloud</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(rgba(10, 15, 10, 0.85), rgba(15, 5, 10, 0.9)),
+                        url('https://images.unsplash.com/photo-1629858349540-3eb415a77033?auto=format&fit=crop&w=2000&q=80') center/cover no-repeat fixed;
+            min-height: 100vh;
+            font-family: 'Outfit', sans-serif;
+            color: white;
+            padding: 3rem 2rem;
+        }
+
+        .wrapper {
+            max-width: 860px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .back-link {
+            color: #4ade80;
+            text-decoration: none;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .back-link:hover { opacity: 1; }
+        header h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #4ade80, #34d399);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .badge {
+            margin-left: auto;
+            background: rgba(74, 222, 128, 0.15);
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            color: #4ade80;
+            padding: 4px 14px;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* Card */
+        .card {
+            background: rgba(15, 20, 15, 0.5);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead tr {
+            background: rgba(74, 222, 128, 0.08);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        th {
+            padding: 14px 20px;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255,255,255,0.45);
+        }
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.15s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,0.03); }
+        td {
+            padding: 14px 20px;
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.87);
+            vertical-align: middle;
+        }
+
+        .email-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4ade80, #34d399);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #0a0f0a;
+            flex-shrink: 0;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 99px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .status-active {
+            background: rgba(74, 222, 128, 0.12);
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            color: #4ade80;
+        }
+        .status-inactive {
+            background: rgba(248, 113, 113, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            color: #f87171;
+        }
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .id-cell { color: rgba(255,255,255,0.3); font-size: 0.8rem; }
+        .date-cell { color: rgba(255,255,255,0.5); font-size: 0.83rem; }
+
+        /* Empty state */
+        .empty-state {
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+        .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .empty-title { font-size: 1.1rem; font-weight: 600; color: rgba(255,255,255,0.6); }
+        .empty-sub { font-size: 0.85rem; color: rgba(255,255,255,0.3); margin-top: 0.4rem; }
+
+        /* Footer note */
+        .footer-note {
+            text-align: center;
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.2);
+            padding: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+
+        <header>
+            <a href="/" class="back-link">← Back to Dashboard</a>
+            <h1>☁️ Cloud Accounts</h1>
+            <span class="badge">{{ total }} user{{ 's' if total != 1 else '' }}</span>
+        </header>
+
+        <div class="card">
+            {% if users %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Registered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td class="id-cell">{{ user.id }}</td>
+                        <td>
+                            <div class="email-cell">
+                                <div class="avatar">{{ user.email[0].upper() }}</div>
+                                {{ user.email }}
+                            </div>
+                        </td>
+                        <td>
+                            {% if user.is_active %}
+                            <span class="status-badge status-active">
+                                <span class="dot"></span> Active
+                            </span>
+                            {% else %}
+                            <span class="status-badge status-inactive">
+                                <span class="dot"></span> Disabled
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="date-cell">{{ user.created_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="footer-note">Passwords are bcrypt-hashed and never stored in plain text.</div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">👤</div>
+                <div class="empty-title">No accounts yet</div>
+                <div class="empty-sub">Users will appear here after signing up via the mobile app.</div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</body>
+</html>

@@ -11,6 +11,7 @@ from typing import Optional, List
 class SyncSensorReading(BaseModel):
     """One BME280 sensor reading from a local vault."""
     vault_id: str
+    user_email: Optional[str] = None
     device_id: Optional[str] = None
     temperature: Optional[float] = None
     humidity: Optional[float] = None
@@ -21,6 +22,7 @@ class SyncSensorReading(BaseModel):
 class SyncAIConditionScan(BaseModel):
     """One AI condition detection (worms/wilting) from a local vault."""
     vault_id: str
+    user_email: Optional[str] = None
     worm_count: int = 0
     confidence_score: Optional[float] = None
     label: Optional[str] = None
@@ -31,6 +33,7 @@ class SyncAIConditionScan(BaseModel):
 class SyncAIProduceScan(BaseModel):
     """One AI produce detection (lettuce/strawberry) from a local vault."""
     vault_id: str
+    user_email: Optional[str] = None
     produce_type: Optional[str] = None
     confidence_score: Optional[float] = None
     label: Optional[str] = None
@@ -56,6 +59,19 @@ class SyncBatchPayload(BaseModel):
     condition_scans: Optional[List[SyncAIConditionScan]] = []
     produce_scans: Optional[List[SyncAIProduceScan]] = []
     system_configs: Optional[List[SyncSystemConfig]] = []
+
+
+# ── Auth Schemas ──────────────────────────────────────────────────────────────────────
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    email: str
 
 
 # ── Outbound Responses (Cloud → Edge) ────────────────────────────────────────

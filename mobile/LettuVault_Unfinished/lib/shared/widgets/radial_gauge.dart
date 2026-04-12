@@ -35,7 +35,7 @@ class RadialGauge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme      = Theme.of(context);
     final cardBg     = theme.cardColor;
-    final labelColor = theme.colorScheme.onSurface.withOpacity(0.7);
+    final labelColor = theme.colorScheme.onSurface.withValues(alpha: 0.7);
     final clampedV   = value.clamp(min, max);
     final isAlert    = value < redLow || value > redHigh;
     final valueColor = isAlert ? Colors.redAccent : theme.colorScheme.onSurface;
@@ -72,11 +72,11 @@ class RadialGauge extends StatelessWidget {
                   : const Color(0xFFF1F5F9),
             ),
             ranges: <GaugeRange>[
-              GaugeRange(startValue: min,   endValue: rLow,  color: Colors.red.withOpacity(0.85),    startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
-              GaugeRange(startValue: rLow,  endValue: gLow,  color: Colors.orange.withOpacity(0.8),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
-              GaugeRange(startValue: gLow,  endValue: gHigh, color: Colors.green.withOpacity(0.85),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
-              GaugeRange(startValue: gHigh, endValue: rHigh, color: Colors.orange.withOpacity(0.8),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
-              GaugeRange(startValue: rHigh, endValue: max,   color: Colors.red.withOpacity(0.85),    startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+              GaugeRange(startValue: min,   endValue: rLow,  color: Colors.red.withValues(alpha: 0.85),    startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+              GaugeRange(startValue: rLow,  endValue: gLow,  color: Colors.orange.withValues(alpha: 0.8),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+              GaugeRange(startValue: gLow,  endValue: gHigh, color: Colors.green.withValues(alpha: 0.85),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+              GaugeRange(startValue: gHigh, endValue: rHigh, color: Colors.orange.withValues(alpha: 0.8),  startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
+              GaugeRange(startValue: rHigh, endValue: max,   color: Colors.red.withValues(alpha: 0.85),    startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
             ],
             pointers: <GaugePointer>[
               NeedlePointer(
@@ -107,7 +107,7 @@ class RadialGauge extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isAlert
-                          ? Colors.redAccent.withOpacity(0.5)
+                          ? Colors.redAccent.withValues(alpha: 0.5)
                           : (theme.brightness == Brightness.dark
                               ? Colors.white10
                               : const Color(0xFFE6E9EE)),
@@ -115,7 +115,7 @@ class RadialGauge extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Colors.black.withValues(alpha: 0.06),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),

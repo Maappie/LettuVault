@@ -2,7 +2,7 @@
 # Cloud schema mirrors the local schema but adds vault_id to all tables
 # so the cloud can distinguish between multiple physical hardware boxes.
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
 from cloud_backend.core.config import settings
 import datetime
@@ -24,13 +24,14 @@ class CloudSensorReading(Base):
     __tablename__ = "cloud_sensor_readings"
 
     id           = Column(Integer, primary_key=True, index=True)
-    vault_id     = Column(String, nullable=False, index=True)   # e.g. "VAULT_ALPHA_01"
-    device_id    = Column(String, nullable=True)                 # ESP32 device identifier
+    vault_id     = Column(String, nullable=False, index=True)
+    user_email   = Column(String, nullable=True, index=True)     # Attached by sync engine
+    device_id    = Column(String, nullable=True)
     temperature  = Column(Float, nullable=True)
     humidity     = Column(Float, nullable=True)
     pressure     = Column(Float, nullable=True)
-    timestamp    = Column(DateTime, nullable=False)              # Original edge timestamp
-    synced_at    = Column(DateTime, default=utc_now)            # When it arrived at the cloud
+    timestamp    = Column(DateTime, nullable=False)
+    synced_at    = Column(DateTime, default=utc_now)
 
 
 # ── Cloud Mirror: AI Condition Scans (Worms / Wilting) ──────────────────────
@@ -39,10 +40,11 @@ class CloudAIConditionScan(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     vault_id         = Column(String, nullable=False, index=True)
+    user_email       = Column(String, nullable=True, index=True)
     worm_count       = Column(Integer, default=0)
     confidence_score = Column(Float, nullable=True)
     label            = Column(String, nullable=True)
-    image            = Column(String, nullable=True)   # base64 or relative path
+    image            = Column(String, nullable=True)
     timestamp        = Column(DateTime, nullable=False)
     synced_at        = Column(DateTime, default=utc_now)
 
@@ -53,6 +55,7 @@ class CloudAIProduceScan(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     vault_id         = Column(String, nullable=False, index=True)
+    user_email       = Column(String, nullable=True, index=True)
     produce_type     = Column(String, nullable=True)
     confidence_score = Column(Float, nullable=True)
     label            = Column(String, nullable=True)
@@ -71,3 +74,14 @@ class CloudSystemConfig(Base):
     pressure         = Column(Float, nullable=True)
     timestamp        = Column(DateTime, nullable=False)
     synced_at        = Column(DateTime, default=utc_now)
+
+
+# ── User Accounts (Cloud Auth) ────────────────────────────────────────────
+class CloudUser(Base):
+    __tablename__ = "cloud_users"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    email         = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    is_active     = Column(Boolean, default=True)
+    created_at    = Column(DateTime, default=utc_now)

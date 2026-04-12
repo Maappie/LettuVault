@@ -11,7 +11,7 @@
 #   1 = First external USB camera
 #   2 = Second external USB camera
 #   "rtsp://..." = IP/Network camera stream URL
-CAMERA_INDEX = 1
+CAMERA_INDEX = 2
 
 # Resolution hint (camera may not support all values)
 # Common options: (640, 480), (1280, 720), (1920, 1080)

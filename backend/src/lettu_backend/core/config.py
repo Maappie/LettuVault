@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Set to False to bypass for development without hardware.
     REQUIRE_ESP32_ACK: bool = os.getenv("REQUIRE_ESP32_ACK", "true").lower() == "true"
 
+    # 🚀 Environment Mode
+    # Set to true to execute real nmcli and hardware commands on Raspberry Pi
+    IS_PRODUCTION: bool = os.getenv("IS_PRODUCTION", "false").lower() == "true"
+
     class Config:
         case_sensitive = True
 

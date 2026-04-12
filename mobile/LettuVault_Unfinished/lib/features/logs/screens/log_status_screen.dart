@@ -1,6 +1,6 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:my_new_app/src/core/constants.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -30,7 +30,7 @@ class LogStatusScreen extends StatelessWidget {
       debugPrint('Share error: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to share logs')),
+        SnackBar(content: Text(kDevMode ? "[DEV ERROR] Share API failed: $e" : 'Failed to share logs')),
       );
     }
   }
@@ -59,7 +59,7 @@ class LogStatusScreen extends StatelessWidget {
                     .textTheme
                     .bodySmall
                     ?.color
-                    ?.withOpacity(0.7),
+                    ?.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 20),

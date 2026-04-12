@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'package:my_new_app/features/settings/controllers/settings_controller.dart';
+import 'package:my_new_app/features/settings/widgets/cloud_auth_sheet.dart';
 import 'package:my_new_app/features/settings/widgets/connection_mode_tile.dart';
 import 'package:my_new_app/features/settings/widgets/threshold_sliders.dart';
 import 'package:my_new_app/features/settings/widgets/sys_config_panel.dart';
@@ -79,6 +78,20 @@ class SettingsDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.of(context).pop();
                         onShowOfflineSetup();
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                      leading: Icon(Icons.cloud_outlined,
+                          color: Theme.of(context).colorScheme.primary, size: 22),
+                      title: const Text('Online Mode Setup',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Sign in or create a cloud account',
+                          style: TextStyle(fontSize: 11)),
+                      trailing: const Icon(Icons.chevron_right, size: 20),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        CloudAuthSheet.show(context);
                       },
                     ),
 
@@ -158,7 +171,7 @@ class SettingsDrawer extends StatelessWidget {
                       ),
                       trailing: Switch(
                         value: ctrl.useDefaultThresholds,
-                        activeColor: Colors.blueAccent,
+                        activeThumbColor: Colors.blueAccent,
                         onChanged: (v) => ctrl.setUseDefaultThresholds(v),
                       ),
                     ),
@@ -230,7 +243,7 @@ class _ThemeSwitch extends StatelessWidget {
       trailing: Switch(
         value: ctrl.isDarkMode,
         onChanged: ctrl.setDarkMode,
-        activeColor: Theme.of(context).colorScheme.primary,
+        activeThumbColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }

@@ -14,10 +14,10 @@ from rich.text import Text
 if os.name == 'nt':
     import msvcrt
 else:
-    import sys as _sys
-    import select
-    import tty
-    import termios
+    import sys as _sys # type: ignore
+    import select # type: ignore
+    import tty # type: ignore
+    import termios # type: ignore
 
 # Configuration
 LOG_LIMIT = 100 
@@ -110,6 +110,11 @@ class LogHub:
             "cmd": ["flutter", "run"],
             "color": "blue",
             "desc": "Flutter Mobile App"
+        },
+        "CLOUD SERVER": {
+            "cmd": [python_exe, "-m", "uvicorn", "cloud_backend.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--app-dir", "src"],
+            "color": "bright_blue",
+            "desc": "Local Cloud Mirror"
         }
     }
 
@@ -117,6 +122,10 @@ class LogHub:
         self.include_mobile = include_mobile
         # Define the basic service set
         active_services = ["BROKER", "API SERVER", "SUBSCRIBERS", "PUBLISHERS", "SYNC"]
+        
+        if os.getenv("CLOUD_SERVER_LOCAL", "false").lower() == "true":
+            active_services.append("CLOUD SERVER")
+            
         if self.include_mobile:
             active_services.append("MOBILE_APP")
             
@@ -149,10 +158,26 @@ class LogHub:
             potential_path = os.path.join(cwd, "mobile", "LettuVault_Unfinished")
             if os.path.exists(potential_path):
                 cwd = potential_path
+        elif name == "CLOUD SERVER":
+            potential_path = os.path.join(cwd, "cloud-server")
+            if os.path.exists(potential_path):
+                cwd = potential_path
 
         while self.running:
             try:
                 msg = f"🔄 [SYSTEM] Starting {name}..."
+                
+                if name == "CLOUD SERVER":
+                    import socket
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        s.connect(("8.8.8.8", 80))
+                        ip = s.getsockname()[0]
+                        s.close()
+                        msg = f"☁️  [SYSTEM] Cloud Server mapped! Update kCloudBaseUrl in Mobile App to: http://{ip}:8001"
+                    except Exception:
+                        pass
+                
                 self.logs[name].append(msg)
                 if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
                 
@@ -268,9 +293,7 @@ class LogHub:
         threading.Thread(target=self.capture_logs, args=("BROKER",), daemon=True).start()
         time.sleep(1) 
         
-        other_services = ["API SERVER", "SUBSCRIBERS", "PUBLISHERS", "SYNC"]
-        if self.include_mobile:
-            other_services.append("MOBILE_APP")
+        other_services = [s for s in self.service_names if s != "BROKER"]
 
         for name in other_services:
             threading.Thread(target=self.capture_logs, args=(name,), daemon=True).start()
@@ -321,7 +344,7 @@ class LogHub:
         finally:
             # Restore terminal settings on Linux
             if old_settings is not None:
-                termios.tcsetattr(_sys.stdin, termios.TCSADRAIN, old_settings)
+                termios.tcsetattr(_sys.stdin, termios.TCSADRAIN, old_settings) # type: ignore
             self.stop_all_services()
 
 def launch_hub(include_mobile=False):

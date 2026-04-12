@@ -7,6 +7,7 @@ from cloud_backend.models.database import (
     CloudAIConditionScan,
     CloudAIProduceScan,
     CloudSystemConfig,
+    CloudUser,
 )
 from cloud_backend.models.domain import (
     SyncSensorReading,
@@ -70,3 +71,17 @@ class CloudRepository:
             q = q.filter(CloudSystemConfig.vault_id == vault_id)
         return q.order_by(CloudSystemConfig.timestamp.desc()).limit(1).all()
 
+    # ── User Auth ────────────────────────────────────────────────────────────
+
+    def create_user(self, email: str, password_hash: str) -> CloudUser:
+        user = CloudUser(email=email, password_hash=password_hash)
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def get_user_by_email(self, email: str) -> CloudUser | None:
+        return self.db.query(CloudUser).filter(CloudUser.email == email).first()
+
+    def get_all_users(self) -> list[CloudUser]:
+        return self.db.query(CloudUser).order_by(CloudUser.created_at.desc()).all()

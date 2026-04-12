@@ -46,6 +46,7 @@ class SystemConfig(Base):
     temperature = Column(Float)
     humidity = Column(Float)
     pressure = Column(Float)
+    user_email = Column(String, nullable=True)  # Cloud-registered user email
 
 class InternalEnvironmentReading(Base):
     __tablename__ = "internal_environment_readings"

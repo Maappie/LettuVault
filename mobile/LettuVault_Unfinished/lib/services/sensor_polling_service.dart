@@ -241,7 +241,7 @@ class SensorPollingService extends ChangeNotifier {
 
   // ── Zone notifications ───────────────────────────────────────────────────
 
-  void _fireZoneNotifications(reading) {
+  void _fireZoneNotifications(dynamic reading) {
     NotificationService.instance.checkZone(
       key: 'temp', sensorName: 'Temperature',
       readingStr: '${reading.temperature?.toStringAsFixed(1)}°C',

@@ -48,7 +48,7 @@ Widget buildRadial(BuildContext context, double v, double min, double max,
 
   final theme = Theme.of(context);
   final cardBg = theme.cardColor;
-  final labelColor = theme.colorScheme.onSurface.withOpacity(0.7);
+  final labelColor = theme.colorScheme.onSurface.withValues(alpha: 0.7);
   final valueColor = isAlert ? Colors.redAccent : theme.colorScheme.onSurface;
 
   // Clamp all boundaries to the axis [min, max]
@@ -83,23 +83,23 @@ Widget buildRadial(BuildContext context, double v, double min, double max,
           ranges: <GaugeRange>[
             // RED: min → redLow
             GaugeRange(startValue: min, endValue: rLow,
-                color: Colors.red.withOpacity(0.85),
+                color: Colors.red.withValues(alpha: 0.85),
                 startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
             // ORANGE: redLow → greenLow
             GaugeRange(startValue: rLow, endValue: gLow,
-                color: Colors.orange.withOpacity(0.8),
+                color: Colors.orange.withValues(alpha: 0.8),
                 startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
             // GREEN: greenLow → greenHigh
             GaugeRange(startValue: gLow, endValue: gHigh,
-                color: Colors.green.withOpacity(0.85),
+                color: Colors.green.withValues(alpha: 0.85),
                 startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
             // ORANGE: greenHigh → redHigh
             GaugeRange(startValue: gHigh, endValue: rHigh,
-                color: Colors.orange.withOpacity(0.8),
+                color: Colors.orange.withValues(alpha: 0.8),
                 startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
             // RED: redHigh → max
             GaugeRange(startValue: rHigh, endValue: max,
-                color: Colors.red.withOpacity(0.85),
+                color: Colors.red.withValues(alpha: 0.85),
                 startWidth: 0.2, endWidth: 0.2, sizeUnit: GaugeSizeUnit.factor),
           ],
 
@@ -127,12 +127,12 @@ Widget buildRadial(BuildContext context, double v, double min, double max,
               color: cardBg,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isAlert ? Colors.redAccent.withOpacity(0.5) : (theme.brightness == Brightness.dark ? Colors.white10 : const Color(0xFFE6E9EE)),
+                color: isAlert ? Colors.redAccent.withValues(alpha: 0.5) : (theme.brightness == Brightness.dark ? Colors.white10 : const Color(0xFFE6E9EE)),
                 width: 2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -188,7 +188,7 @@ Widget buildChart(BuildContext context,
 }) {
   final theme = Theme.of(context);
   final textPrimary = theme.colorScheme.onSurface;
-  final textSecondary = theme.colorScheme.onSurface.withOpacity(0.7);
+  final textSecondary = theme.colorScheme.onSurface.withValues(alpha: 0.7);
   final cardBg = theme.cardColor;
 
   // Return a card with a responsive/default height so the parent can scroll
@@ -209,8 +209,11 @@ Widget buildChart(BuildContext context,
     final double maxY = (buf.map((e) => e.value).reduce(max) + 5).ceilToDouble();
 
     int labelInterval = 1;
-    if (count > 20) labelInterval = (count / 6).ceil();
-    else if (count > 8) labelInterval = 2;
+    if (count > 20) {
+      labelInterval = (count / 6).ceil();
+    } else if (count > 8) {
+      labelInterval = 2;
+    }
 
     return Container(
       height: height ?? 360,
@@ -320,12 +323,12 @@ Widget buildPill(BuildContext context, String m, Color c) => AnimatedContainer(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : c.withOpacity(0.08),
+        color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : c.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(50),
         boxShadow: m == 'CRITICAL'
-            ? [BoxShadow(color: c.withOpacity(0.12), blurRadius: 12, spreadRadius: 1)]
-            : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
-        border: m == 'CRITICAL' ? Border.all(color: c.withOpacity(0.25), width: 1.0) : null,
+            ? [BoxShadow(color: c.withValues(alpha: 0.12), blurRadius: 12, spreadRadius: 1)]
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)],
+        border: m == 'CRITICAL' ? Border.all(color: c.withValues(alpha: 0.25), width: 1.0) : null,
       ),
       child: Center(
         child: Text(m, style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).brightness == Brightness.dark ? c : c)),
@@ -394,7 +397,7 @@ Widget buildLoadingScreen(BuildContext context, {String message = 'Starting Lett
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
           ),
           const SizedBox(height: 8),
-          Text(message, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+          Text(message, style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.7))),
           const SizedBox(height: 18),
           CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary)),
         ],
@@ -467,7 +470,7 @@ void showAppAboutDialog(BuildContext context) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
           child: const Text("Close"),
         ),
       ],

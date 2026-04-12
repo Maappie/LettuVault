@@ -30,7 +30,7 @@ class SensorChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme         = Theme.of(context);
     final textPrimary   = theme.colorScheme.onSurface;
-    final textSecondary = theme.colorScheme.onSurface.withOpacity(0.7);
+    final textSecondary = theme.colorScheme.onSurface.withValues(alpha: 0.7);
     final cardBg        = theme.cardColor;
 
     if (buffer.isEmpty) {
@@ -56,8 +56,11 @@ class SensorChart extends StatelessWidget {
     final maxY  = (buffer.map((e) => e.value).reduce(max) + 5).ceilToDouble();
 
     int labelInterval = 1;
-    if (count > 20) labelInterval = (count / 6).ceil();
-    else if (count > 8) labelInterval = 2;
+    if (count > 20) {
+      labelInterval = (count / 6).ceil();
+    } else if (count > 8) {
+      labelInterval = 2;
+    }
 
     return Container(
       height: height ?? 360,

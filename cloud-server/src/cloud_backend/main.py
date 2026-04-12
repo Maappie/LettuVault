@@ -5,10 +5,13 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
 
 from cloud_backend.core.config import settings
 from cloud_backend.api.v1.endpoints import router as api_v1_router
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 
 app = FastAPI(
@@ -23,6 +26,9 @@ app = FastAPI(
 static_dir = os.path.join(os.path.dirname(__file__), "global", "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+_template_dir = os.path.join(os.path.dirname(__file__), "template")
+templates = Jinja2Templates(directory=_template_dir)
 
 # Allow Flutter mobile app from any origin
 app.add_middleware(
@@ -65,6 +71,30 @@ import os
 
 @app.get("/love", tags=["UI"], include_in_schema=False)
 def get_romantic_dashboard():
-    # Serve the love.html template from the template folder
     template_path = os.path.join(os.path.dirname(__file__), "template", "love.html")
     return FileResponse(template_path)
+
+
+@app.get("/accounts", tags=["UI"], include_in_schema=False)
+def get_accounts_page(request: Request):
+    """Admin view: list all registered cloud users."""
+    from cloud_backend.models.database import SessionLocal
+    from cloud_backend.repository.cloud_repo import CloudRepository
+    db = SessionLocal()
+    try:
+        repo = CloudRepository(db)
+        users = repo.get_all_users()
+        rows = [
+            {
+                "id":         u.id,
+                "email":      u.email,
+                "is_active":  u.is_active,
+                "created_at": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "—",
+            }
+            for u in users
+        ]
+    finally:
+        db.close()
+    return templates.TemplateResponse(
+        "accounts.html", {"request": request, "users": rows, "total": len(rows)}
+    )

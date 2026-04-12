@@ -46,7 +46,7 @@ class _ErrorBanner extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
+              onPressed: () => Navigator.of(dialogCtx, rootNavigator: true).pop(),
               child: const Text('Close'),
             ),
           ],

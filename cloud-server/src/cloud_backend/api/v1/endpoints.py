@@ -1,13 +1,13 @@
 # cloud-server/src/cloud_backend/api/v1/endpoints.py
 # Cloud API routes. No MQTT, no hardware, no AI — data mirror only.
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from cloud_backend.core.security import require_sync_key, require_mobile_key
+from cloud_backend.core.security import require_sync_key, require_mobile_key, hash_password, verify_password, create_access_token
 from cloud_backend.models.database import SessionLocal
-from cloud_backend.models.domain import SyncBatchPayload, SyncResult
+from cloud_backend.models.domain import SyncBatchPayload, SyncResult, AuthRequest, AuthResponse
 from cloud_backend.repository.cloud_repo import CloudRepository
 
 router = APIRouter(tags=["Cloud API v1"])
@@ -106,3 +106,44 @@ def get_latest_system_config(
 ):
     repo = CloudRepository(db)
     return repo.get_latest_system_config(vault_id=vault_id)
+
+
+# ── Auth Endpoints (Mobile App → Cloud) ───────────────────────────────────────────────
+
+@router.post(
+    "/auth/signup",
+    response_model=AuthResponse,
+    summary="[Mobile] Register a new user account",
+)
+def signup(req: AuthRequest, db: Session = Depends(get_db)):
+    """
+    Creates a new cloud user account.
+    Returns a JWT on success so the app can proceed without a second login step.
+    """
+    repo = CloudRepository(db)
+    if repo.get_user_by_email(req.email):
+        raise HTTPException(status_code=409, detail="email_taken")
+    hashed = hash_password(req.password)
+    repo.create_user(email=req.email, password_hash=hashed)
+    token = create_access_token(req.email)
+    return AuthResponse(access_token=token, email=req.email)
+
+
+@router.post(
+    "/auth/login",
+    response_model=AuthResponse,
+    summary="[Mobile] Login with email and password",
+)
+def login(req: AuthRequest, db: Session = Depends(get_db)):
+    """
+    Verifies credentials against the cloud_users table.
+    Returns a JWT on success.
+    """
+    repo = CloudRepository(db)
+    user = repo.get_user_by_email(req.email)
+    if not user or not verify_password(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="account_disabled")
+    token = create_access_token(req.email)
+    return AuthResponse(access_token=token, email=req.email)

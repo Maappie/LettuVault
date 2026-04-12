@@ -84,6 +84,7 @@ class ChartCard extends StatelessWidget {
           _EmptyLogPlaceholder(height: chartH)
         else
           SensorChart(
+            key: ValueKey(mode),
             buffer: chartBuffer,
             color:  color,
             unit:   unit,

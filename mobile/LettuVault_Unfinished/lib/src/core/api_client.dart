@@ -25,16 +25,28 @@ class ApiClient {
   /// Build the correct auth header from the current app mode and secure storage.
   Future<Map<String, String>> _buildHeaders() async {
     final isOnline = appModeNotifier.value == AppMode.online;
-    final apiKey = isOnline
-        ? (await SecureStorage.getMobileApiKey() ?? '')
-        : (await SecureStorage.getLocalApiKey() ?? '');
-
-    final headerName = isOnline ? 'X-MOBILE-API-KEY' : 'X-API-KEY';
-
-    return {
-      'Content-Type': 'application/json',
-      headerName: apiKey,
-    };
+    
+    if (isOnline) {
+      // Cloud server identifies users via JWT for data segregation.
+      // Only attach the header if we actually have a token stored.
+      final jwt = await SecureStorage.getJwt();
+      if (jwt != null && jwt.isNotEmpty) {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt',
+        };
+      }
+      // No JWT yet (user hasn't logged in to cloud) — send no auth header.
+      // The cloud server will respond 403, which the UI surfaces as "not logged in".
+      return {'Content-Type': 'application/json'};
+    } else {
+      // Local Raspberry Pi Pi uses the static hardware API key
+      final localKey = await SecureStorage.getLocalApiKey() ?? '';
+      return {
+        'Content-Type': 'application/json',
+        'X-API-KEY': localKey,
+      };
+    }
   }
 
   /// GET request to [endpoint] (e.g. '/sensor-readings').

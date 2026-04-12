@@ -131,3 +131,168 @@ def get_internal_environment_readings(db: Session = Depends(get_db)):
 def create_internal_environment_reading(reading_in: InternalEnvironmentCreateSchema, db: Session = Depends(get_db)):
     repo = DataRepository(db)
     return repo.create_internal_environment_reading(reading_in.model_dump())
+
+
+# --- 👤 USER IDENTITY ENDPOINT ---
+from pydantic import BaseModel as _BaseModel
+from lettu_backend.core.config import PROJECT_ROOT
+import re as _re, pathlib as _pathlib
+
+class _IdentityPayload(_BaseModel):
+    email: str
+
+@router.post("/identity", dependencies=[Depends(get_current_active_device)])
+def save_user_identity(payload: _IdentityPayload, db: Session = Depends(get_db)):
+    """
+    Called by the mobile app after successful cloud auth.
+    1. Saves the user email into the system_config table (most recent row).
+    2. Writes VAULT_USER_EMAIL to the project .env so sync_engine.py picks it up.
+    """
+    repo = DataRepository(db)
+    repo.save_user_email(payload.email)
+
+    # Persist to .env file so sync_engine reads it on next cycle
+    env_path = _pathlib.Path(PROJECT_ROOT) / ".env"
+    try:
+        content = env_path.read_text(encoding="utf-8")
+        if "VAULT_USER_EMAIL" in content:
+            content = _re.sub(
+                r"^VAULT_USER_EMAIL=.*",
+                f"VAULT_USER_EMAIL={payload.email}",
+                content, flags=_re.MULTILINE
+            )
+        else:
+            content += f"\nVAULT_USER_EMAIL={payload.email}\n"
+        env_path.write_text(content, encoding="utf-8")
+    except Exception as e:
+        import logging; logging.getLogger("identity").warning(f"Could not write .env: {e}")
+
+    return {"ok": True, "email": payload.email}
+
+
+# --- 📡 HOME WIFI CONNECT ENDPOINT ---
+import subprocess as _subprocess, socket as _socket, asyncio as _asyncio
+from fastapi import BackgroundTasks
+
+class _WifiPayload(_BaseModel):
+    ssid: str
+    password: str
+
+@router.post("/connect-home-wifi", dependencies=[Depends(get_current_active_device)])
+def connect_home_wifi(payload: _WifiPayload):
+    """
+    Commands the Pi to connect its USB WiFi adapter (wlan1) to the given home router.
+    Blocks until connected (max 20s) then tests internet connectivity.
+    """
+    ssid     = payload.ssid.strip()
+    password = payload.password
+
+    # --- DEV OVERRIDE (For Laptop Testing) ---
+    if not settings.IS_PRODUCTION:
+        import logging; logging.getLogger("wifi").info(f"[DEV] Mocking WiFi connection to {ssid}")
+        return {"success": True, "ssid": ssid, "note": "Dev Mock"}
+
+    # Step 1: Connect wlan1 to the home router using nmcli
+    connect_result = _subprocess.run(
+        ["nmcli", "dev", "wifi", "connect", ssid,
+         "password", password, "ifname", "wlan1"],
+        capture_output=True, text=True, timeout=25,
+    )
+    if connect_result.returncode != 0:
+        err = connect_result.stderr.strip() or connect_result.stdout.strip()
+        # Translate nmcli errors to user-friendly messages
+        if "No network with SSID" in err:
+            detail = "That Wi-Fi network was not found. Make sure the name is correct."
+        elif "Secrets were required" in err or "password" in err.lower():
+            detail = "Wrong password. Please check and try again."
+        elif "already connected" in err.lower():
+            detail = None  # Already connected — proceed to internet test
+        else:
+            detail = "Could not connect to your home Wi-Fi. Please try again."
+        if detail:
+            raise HTTPException(status_code=422, detail=detail)
+
+    # Step 2: Internet connectivity test
+    try:
+        sock = _socket.create_connection(("8.8.8.8", 53), timeout=5)
+        sock.close()
+        internet_ok = True
+    except OSError:
+        internet_ok = False
+
+    if not internet_ok:
+        raise HTTPException(
+            status_code=503,
+            detail="Connected to your Wi-Fi, but no internet was detected. Check your router."
+        )
+
+    return {"success": True, "ssid": ssid}
+
+
+# --- 🛡️ IOT CLOUD AUTH PROXY ---
+
+import requests as _requests
+
+class _AuthProxyPayload(_BaseModel):
+    email: str
+    password: str
+    cloud_auth_url: str  # The full URL to the cloud server's login or signup endpoint
+    
+@router.post("/proxy-auth", dependencies=[Depends(get_current_active_device)])
+def proxy_cloud_authentication(payload: _AuthProxyPayload):
+    """
+    IoT Proxy Auth: Solves the network routing dilemma where the phone is trapped
+    on the Pi's hotspot without internet. The phone sends its credentials here,
+    and the Pi (which is connected to home Wi-Fi) forwards them to the Cloud.
+    """
+    try:
+        # Step 1: Forward request to the Cloud
+        res = _requests.post(
+            payload.cloud_auth_url,
+            json={"email": payload.email, "password": payload.password},
+            timeout=15
+        )
+        data = res.json()
+        
+        # Step 2: If auth succeeded, auto-save the identity on the Pi!
+        if res.status_code in (200, 201) and "access_token" in data:
+            import re
+            import pathlib
+            from lettu_backend.core.config import PROJECT_ROOT
+            
+            # Save to database
+            from lettu_backend.models.database import SessionLocal
+            from lettu_backend.repository.scan_repo import DataRepository
+            db = SessionLocal()
+            try:
+                repo = DataRepository(db)
+                repo.save_user_email(payload.email)
+            finally:
+                db.close()
+
+            # Save to .env
+            env_path = pathlib.Path(PROJECT_ROOT) / ".env"
+            try:
+                content = env_path.read_text(encoding="utf-8")
+                if "VAULT_USER_EMAIL" in content:
+                    content = re.sub(
+                        r"^VAULT_USER_EMAIL=.*",
+                        f"VAULT_USER_EMAIL={payload.email}",
+                        content, flags=re.MULTILINE
+                    )
+                else:
+                    content += f"\nVAULT_USER_EMAIL={payload.email}\n"
+                env_path.write_text(content, encoding="utf-8")
+            except Exception as e:
+                import logging
+                logging.getLogger("proxy").warning(f"Failed writing .env: {e}")
+
+        # Step 3: Forward the Cloud Server's EXACT response status & JSON back to the phone
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=res.status_code, content=data)
+
+    except _requests.RequestException as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Pi could not reach the Cloud Server: {str(e)}"
+        )

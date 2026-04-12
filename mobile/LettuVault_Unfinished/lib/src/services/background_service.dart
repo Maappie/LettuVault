@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -172,7 +171,6 @@ Future<void> initBackgroundService() async {
   try {
     await Workmanager().initialize(
       callbackDispatcher,
-      isInDebugMode: false,
     );
     await Workmanager().registerPeriodicTask(
       _kWmTaskName,

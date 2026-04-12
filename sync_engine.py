@@ -32,6 +32,7 @@ VAULT_ID            = os.getenv("VAULT_ID", "VAULT_UNKNOWN")
 CLOUD_SYNC_API_KEY  = os.getenv("CLOUD_SYNC_API_KEY", "")
 CLOUD_SYNC_URL      = os.getenv("CLOUD_SYNC_URL", "")         # e.g. https://lettuvault-cloud.onrender.com/api/v1/sync
 LOCAL_DB_PATH       = os.getenv("LOCAL_DB_PATH", "data/lettu_vault.db")
+VAULT_USER_EMAIL    = os.getenv("VAULT_USER_EMAIL", "")        # Set after cloud auth during onboarding
 
 SYNC_INTERVAL_SECS  = int(os.getenv("SYNC_INTERVAL_SECS", "60"))   # How often to sync (default: 1 min)
 BATCH_SIZE          = int(os.getenv("SYNC_BATCH_SIZE", "100"))       # Max records per sync call
@@ -158,6 +159,7 @@ def build_sensor_payload(rows: list[dict]) -> list[dict]:
     return [
         {
             "vault_id":    VAULT_ID,
+            "user_email":  VAULT_USER_EMAIL or None,
             "device_id":   r.get("device_id"),
             "temperature": r.get("temperature"),
             "humidity":    r.get("humidity"),
@@ -171,6 +173,7 @@ def build_condition_payload(rows: list[dict]) -> list[dict]:
     return [
         {
             "vault_id":         VAULT_ID,
+            "user_email":       VAULT_USER_EMAIL or None,
             "worm_count":       r.get("worm_count", 0),
             "confidence_score": r.get("confidence_score"),
             "label":            r.get("label"),
@@ -184,6 +187,7 @@ def build_produce_payload(rows: list[dict]) -> list[dict]:
     return [
         {
             "vault_id":         VAULT_ID,
+            "user_email":       VAULT_USER_EMAIL or None,
             "produce_type":     r.get("produce_type"),
             "confidence_score": r.get("confidence_score"),
             "label":            r.get("label"),

@@ -82,6 +82,17 @@ Stores data from ESP32 hardware.
 
 ---
 
+## Environment Setup (For Developers)
+
+The root `.env` file governs how the backend and related scripts behave:
+
+| Variable | Purpose | Development Setting | Production Setting |
+|---|---|---|---|
+| `IS_PRODUCTION` | Toggles real hardware interaction vs. software mocking. | `false` (Bypasses OS commands like `nmcli` Wi-Fi connections that crash Windows). | `true` (Runs real Linux terminal commands for the Raspberry Pi). |
+| `CLOUD_SERVER_LOCAL` | Tells the `lettu_vault_start` TUI whether to spin up the local cloud backend on port `8001`. | `true` | `false` (or empty) |
+
+---
+
 ## Running
 
 ```powershell

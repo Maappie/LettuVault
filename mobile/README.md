@@ -108,6 +108,21 @@ feature_name/
 
 ---
 
+## Environment & Configuration (For Developers)
+
+When moving between active development, testing, and production, check the parameters in `lib/src/core/constants.dart`:
+
+1. **`kDevMode` Toggle:**
+   - **`true`**: UI error messages will display raw exceptions and stack traces (e.g., `[DEV ERROR] SocketException: ...`). Essential for debugging API routing limits or hardware crashes.
+   - **`false`**: UI displays clean, user-friendly fallback phrases. Toggle this to `false` before compiling the final production APK.
+
+2. **`kCloudBaseUrl` Targeting:**
+   - **Local Testing (Phone):** Set to your laptop's Wi-Fi IP address + port 8001 (e.g., `http://192.168.100.20:8001`) to hit your locally running `cloud-server`.
+   - **Production:** Set to the public Render domain (e.g., `https://lettuvault.onrender.com`).
+   - *Note: Android Emulators use `http://10.0.2.2:8001` to loopback to the host machine.*
+
+---
+
 ## State Management
 
 Use **`ValueNotifier` + `ListenableBuilder`** (no external packages):

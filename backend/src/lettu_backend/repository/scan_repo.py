@@ -60,3 +60,19 @@ class DataRepository:
     def get_all_internal_environment_readings(self, limit: int = 100):
         return self.db.query(InternalEnvironmentReading).order_by(InternalEnvironmentReading.timestamp.desc()).limit(limit).all()
 
+    # --- USER IDENTITY METHOD ---
+    def save_user_email(self, email: str):
+        """
+        Updates the user_email on the most recent SystemConfig row,
+        or creates a placeholder config row if none exists yet.
+        """
+        latest = self.db.query(SystemConfig).order_by(SystemConfig.timestamp.desc()).first()
+        if latest:
+            latest.user_email = email
+            self.db.commit()
+        else:
+            # No config rows yet — create a placeholder to carry the email
+            record = SystemConfig(user_email=email)
+            self.db.add(record)
+            self.db.commit()
+

@@ -65,7 +65,7 @@ class ConnectionModeTile extends StatelessWidget {
               ),
               Switch(
                 value: isOffline,
-                activeColor: Colors.orange,
+                activeThumbColor: Colors.orange,
                 inactiveTrackColor: Colors.blue.shade200,
                 onChanged: (_) => onToggle(),
               ),
