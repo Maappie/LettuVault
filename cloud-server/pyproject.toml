@@ -1,8 +1,0 @@
-[project]
-name = "cloud-backend"
-version = "1.0.0"
-description = "LettuVault Cloud Mirror — stripped-down FastAPI server for cloud deployment"
-requires-python = ">=3.11"
-
-[tool.setuptools.packages.find]
-where = ["src"]
