@@ -45,9 +45,9 @@ app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
 @app.on_event("startup")
 def startup_event():
-    """Auto-create cloud tables on first boot."""
-    from cloud_backend.models.database import Base, engine
-    Base.metadata.create_all(bind=engine)
+    """Run Alembic migrations on every deploy — ensures schema is always up to date."""
+    from cloud_backend.core.migrate import run_migrations
+    run_migrations()
 
 
 @app.get("/cloud-server-health", tags=["Health"], include_in_schema=False)

@@ -22,7 +22,34 @@ When deploying to a public host (like Render):
 
 ---
 
+## Database Migrations (Alembic)
+
+This project uses Alembic to manage schema changes on the cloud database.
+
+### 🔁 Workflow for Schema Changes
+
+If you need to add a new table or column to `src/cloud_backend/models/database.py`, follow these steps:
+
+1.  **Modify the Code:** Update the SQLAlchemy models in `src/cloud_backend/models/database.py`.
+2.  **Generate Migration File:** Run this command in the `cloud-server` directory:
+    ```powershell
+    python -m alembic revision --autogenerate -m "describe_your_change"
+    ```
+3.  **Review:** Open the new file in `migrations/versions/` and verify the `upgrade()` and `downgrade()` functions look correct.
+4.  **Commit and Push:** Add the new migration file to Git along with your model changes.
+
+### 🚀 Auto-Migration on Deploy
+When you push to Render, the server's startup routine automatically runs:
+```python
+alembic upgrade head
+```
+This ensures the production database is always in sync with your latest code without manual intervention.
+
+---
+
 ## Features
+- **Auto-Migrating Schema:** Uses Alembic to bridge the gap between Python models and the live PostgreSQL DB on deploy.
 - **Offline Batch Syncing:** Exposes endpoints for the hardware's `sync_engine.py` to push cached sensor/AI data using a shared `CLOUD_SYNC_API_KEY`.
 - **JWT Authentication:** Manages user Accounts and ties synced records seamlessly to specific users.
 - **REST API:** Provides endpoints for the Mobile App to fetch historical data.
+

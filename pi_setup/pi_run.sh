@@ -27,6 +27,7 @@ mkdir -p data
 pkill -f "lettu_backend"
 pkill -f "lettu_vault_ai"
 pkill -f "uvicorn"
+pkill -f "sync_engine"
 
 # Set Python Path
 export PYTHONPATH="$REPO_PATH/backend/src:$REPO_PATH/ai_system/src:$PYTHONPATH"
@@ -34,7 +35,7 @@ export PYTHONPATH="$REPO_PATH/backend/src:$REPO_PATH/ai_system/src:$PYTHONPATH"
 # Function to handle shutdown
 cleanup() {
     echo -e "\n🛑 Shutting down LettuVault..."
-    kill $PID_BROKER $PID_MQTT $PID_AI 2>/dev/null
+    kill $PID_BROKER $PID_MQTT $PID_AI $PID_SYNC 2>/dev/null
     exit 0
 }
 trap cleanup SIGINT SIGTERM
@@ -55,10 +56,15 @@ echo "👁️  Starting AI Detection engine..."
 $PYTHON -m lettu_vault_ai.predict > data/ai_predict.log 2>&1 &
 PID_AI=$!
 
+# 4. Start Cloud Sync Engine
+echo "☁️  Starting Cloud Sync Engine..."
+$PYTHON sync_engine.py > data/sync_engine.log 2>&1 &
+PID_SYNC=$!
+
 # Extract API config using python-dotenv so we don't need complex bash parsing
 API_HOST=$($PYTHON -c 'import os, dotenv; dotenv.load_dotenv(); print(os.getenv("API_HOST", "0.0.0.0"))')
 API_PORT=$($PYTHON -c 'import os, dotenv; dotenv.load_dotenv(); print(os.getenv("API_PORT", "8000"))')
 
-# 4. Start API Server (Main Controller) - This one stays in foreground
+# 5. Start API Server (Main Controller) - This one stays in foreground
 echo "🌐 Starting FastAPI Server on http://$API_HOST:$API_PORT..."
 $PYTHON -m uvicorn lettu_backend.main:app --host "$API_HOST" --port "$API_PORT"

@@ -36,7 +36,8 @@ def main():
         print(f"⚠️ Checkpoint not found at {checkpoint_path}")
         print("🧠 Starting fresh using V114 best weights...")
         
-        initial_weights = r'C:\Users\Raiz\LettuVault\ai_system\runs\lettuce_strawberry_v114\weights\best.pt'
+        from lettu_backend.core.config import PROJECT_ROOT
+        initial_weights = os.path.join(PROJECT_ROOT, 'ai_system', 'runs', 'lettuce_strawberry_v114', 'weights', 'best.pt')
         model = YOLO(initial_weights)
         
         model.train(
