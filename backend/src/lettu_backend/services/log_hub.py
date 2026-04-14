@@ -58,14 +58,23 @@ def sweep_zombies():
                 if any(kw in cmd_str for kw in keywords):
                     try:
                         p.terminate()
+<<<<<<< Updated upstream
                         console.print(f"🧹 [ZOMBIE KILLER] Terminated old process PID: {p.pid}")
+=======
+                        print(f"[ZOMBIE KILLER] Terminated old process PID: {p.pid}")
+>>>>>>> Stashed changes
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
         time.sleep(1) # Wait for OS to cleanup
     except ImportError:
+<<<<<<< Updated upstream
         console.print("[WARN] psutil not found, skipping deep zombie sweep.")
         
     console.print("[OK] System swept. Starting fresh.")
+=======
+        print("[WARN] psutil not found, skipping deep zombie sweep.")
+    print("[OK] System swept. Starting fresh.")
+>>>>>>> Stashed changes
 
 def free_port(port):
     """Safely frees the port before starting, ignoring critical Windows System PIDs."""
@@ -142,7 +151,13 @@ class LogHub:
         self.console = console  # Use the global console
         self.logs = {name: deque(maxlen=LOG_LIMIT) for name in self.service_names}
         self.processes = {} 
-        self.is_headless = not sys.stdin.isatty()
+        # Detect if we should run in headless mode (no TUI)
+        # 1. Force if environment variable is set
+        force_headless = os.getenv("HEADLESS", "false").lower() == "true"
+        # 2. Detect common agent/non-interactive environments
+        is_agent = any(os.getenv(ev) for ev in ["ANTIGRAVITY", "CI", "GITHUB_ACTIONS", "CURSOR_AGENT"])
+        
+        self.is_headless = not sys.stdin.isatty() or force_headless or is_agent
         os.makedirs("data", exist_ok=True)
         
         # Register the cleanup function to run even if the terminal window is closed abruptly
@@ -172,21 +187,16 @@ class LogHub:
 
         while self.running:
             try:
-                msg = f"🔄 [SYSTEM] Starting {name}..."
-                
-                if name == "CLOUD SERVER":
-                    import socket
-                    try:
-                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        s.connect(("8.8.8.8", 80))
-                        ip = s.getsockname()[0]
-                        s.close()
-                        msg = f"☁️  [SYSTEM] Cloud Server mapped! Update kCloudBaseUrl in Mobile App to: http://{ip}:8001"
-                    except Exception:
-                        pass
-                
+                msg = f"(SYSTEM) Starting {name}..."
                 self.logs[name].append(msg)
+<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
+=======
+                if getattr(self, "is_headless", False): 
+                    # ASCII-safe print for headless mode to avoid codec crashes
+                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
+                    print(f"[{name}] {safe_msg}", flush=True)
+>>>>>>> Stashed changes
                 
                 proc = subprocess.Popen(
                     service_cfg["cmd"],
@@ -210,22 +220,40 @@ class LogHub:
                     if stripped and not any(x in stripped for x in ["DeprecationWarning", "warn(", "Use `plugin`"]):
                         self.logs[name].append(stripped)
                         if getattr(self, "is_headless", False):
+<<<<<<< Updated upstream
                             self.console.print(f"[{name}] {stripped}")
+=======
+                            # ASCII-safe print for headless mode
+                            safe_stripped = stripped.encode('ascii', 'ignore').decode('ascii')
+                            print(f"[{name}] {safe_stripped}", flush=True)
+>>>>>>> Stashed changes
                 
                 if not self.running:
                     break
                 
                 exit_code = proc.poll()
-                msg = f"⚠️ [SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s..."
+                msg = f"[SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s..."
                 self.logs[name].append(msg)
+<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
+=======
+                if getattr(self, "is_headless", False):
+                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
+                    print(f"[{name}] {safe_msg}", flush=True)
+>>>>>>> Stashed changes
                 time.sleep(3) 
                 
             except Exception as e:
                 if not self.running: break
-                msg = f"❌ [SYSTEM] Error in {name}: {str(e)}. Retrying in 5s..."
+                msg = f"[SYSTEM] Error in {name}: {str(e)}. Retrying in 5s..."
                 self.logs[name].append(msg)
+<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
+=======
+                if getattr(self, "is_headless", False):
+                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
+                    print(f"[{name}] {safe_msg}", flush=True)
+>>>>>>> Stashed changes
                 time.sleep(5)
 
     def stop_all_services(self):
@@ -245,7 +273,11 @@ class LogHub:
                 except Exception:
                     pass
         self.processes.clear() # Clear the dict so atexit doesn't run it twice
+<<<<<<< Updated upstream
         self.console.print("✅ All systems stopped.")
+=======
+        print("All systems stopped.")
+>>>>>>> Stashed changes
 
     def make_layout(self):
         layout = Layout()
