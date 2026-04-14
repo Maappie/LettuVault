@@ -25,4 +25,12 @@ class SystemConfig {
       pressure: (json['pressure'] as num?)?.toDouble(),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'temperature': temperature,
+      'humidity': humidity,
+      'pressure': pressure,
+    };
+  }
 }

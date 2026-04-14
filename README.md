@@ -1,4 +1,6 @@
 # LettuVault — Project Root
+> [!IMPORTANT]
+> **Python Version Requirement**: This project requires **Python 3.10.11**.
 
 ## 📂 Current Structure
 
@@ -199,8 +201,8 @@ When running locally using `lettu_vault_start`, the system spins up everything a
 ## Setup
 
 ```powershell
-# 1. Create and activate virtual environment
-python -m venv .venv
+# 1. Create and activate virtual environment (Requires Python 3.10.11)
+py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 # 2. Install all dependencies

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:my_new_app/app/app_notifiers.dart';
 import 'package:my_new_app/services/sensor_polling_service.dart';
+import 'package:my_new_app/src/repositories/config_repository.dart';
 
 /// SettingsController — ChangeNotifier for the Settings Drawer.
 ///
@@ -11,6 +12,8 @@ import 'package:my_new_app/services/sensor_polling_service.dart';
 class SettingsController extends ChangeNotifier {
   SettingsController._();
   static final SettingsController instance = SettingsController._();
+
+  final ConfigRepository _configRepo = ConfigRepository();
 
   // ── Theme ────────────────────────────────────────────────────────────────
 
@@ -162,11 +165,16 @@ class SettingsController extends ChangeNotifier {
   double _sysConfigHum    = 60.0;
   double _sysConfigPres   = 1013.0;
 
+  bool   _isSavingSysConfig = false;
+  String? _sysConfigError;
+
   bool   get showSysConfig   => _showSysConfig;
   String get selectedPreset  => _selectedPreset;
   double get sysConfigTemp   => _sysConfigTemp;
   double get sysConfigHum    => _sysConfigHum;
   double get sysConfigPres   => _sysConfigPres;
+  bool   get isSavingSysConfig => _isSavingSysConfig;
+  String? get sysConfigError => _sysConfigError;
 
   void toggleSysConfig() {
     _showSysConfig = !_showSysConfig;
@@ -185,5 +193,27 @@ class SettingsController extends ChangeNotifier {
       _sysConfigTemp = 20.0; _sysConfigHum = 90.0; _sysConfigPres = 1010.0;
     }
     notifyListeners();
+  }
+
+  Future<bool> saveSysConfig() async {
+    _isSavingSysConfig = true;
+    _sysConfigError = null;
+    notifyListeners();
+
+    try {
+      await _configRepo.saveConfig(
+        temperature: _sysConfigTemp,
+        humidity: _sysConfigHum,
+        pressure: _sysConfigPres,
+      );
+      _isSavingSysConfig = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isSavingSysConfig = false;
+      _sysConfigError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 }

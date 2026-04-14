@@ -1,3 +1,4 @@
+# Python Version: 3.10.11
 fastapi
 uvicorn[standard]
 pydantic-settings

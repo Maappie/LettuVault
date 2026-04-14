@@ -1,4 +1,6 @@
 # Cloud Server — LettuVault
+> [!IMPORTANT]
+> **Python Version Requirement**: This component requires **Python 3.10.11**.
 
 This is the remote component of the LettuVault system, designed to be deployed on Render or another cloud provider. It serves as the bridge between multiple offline LettuVault hardware instances (Raspberry Pis) and the user's mobile app when they are away from home.
 

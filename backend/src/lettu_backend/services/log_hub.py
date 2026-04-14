@@ -1,7 +1,13 @@
-import sys
 import os
 import time
 import subprocess
+ 
+# Force UTF-8 for Windows console output
+if os.name == 'nt':
+    import sys
+    import io
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
 import threading
 import atexit
 from collections import deque
@@ -21,6 +27,7 @@ else:
 
 # Configuration
 LOG_LIMIT = 100 
+console = Console()
 
 from lettu_backend.core.config import PROJECT_ROOT
 
@@ -35,7 +42,7 @@ def sweep_zombies():
     """Aggressively kills any existing LettuVault processes before starting, excluding current PID."""
     my_pid = os.getpid()
     keywords = ["lettu_backend", "lettu_vault_ai", "uvicorn", "broker_service", "sync_engine"]
-    print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
+    console.print(f"[SEARCH] Sweeping for zombie processes (Excluding my PID: {my_pid})...")
     
     try:
         import psutil
@@ -51,14 +58,14 @@ def sweep_zombies():
                 if any(kw in cmd_str for kw in keywords):
                     try:
                         p.terminate()
-                        print(f"🧹 [ZOMBIE KILLER] Terminated old process PID: {p.pid}")
+                        console.print(f"🧹 [ZOMBIE KILLER] Terminated old process PID: {p.pid}")
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
         time.sleep(1) # Wait for OS to cleanup
     except ImportError:
-        print("[WARN] psutil not found, skipping deep zombie sweep.")
+        console.print("[WARN] psutil not found, skipping deep zombie sweep.")
         
-    print("[OK] System swept. Starting fresh.")
+    console.print("[OK] System swept. Starting fresh.")
 
 def free_port(port):
     """Safely frees the port before starting, ignoring critical Windows System PIDs."""
@@ -132,7 +139,7 @@ class LogHub:
         self.selected_index = 0
         self.service_names = active_services
         self.running = True
-        self.console = Console()
+        self.console = console  # Use the global console
         self.logs = {name: deque(maxlen=LOG_LIMIT) for name in self.service_names}
         self.processes = {} 
         self.is_headless = not sys.stdin.isatty()
@@ -179,7 +186,7 @@ class LogHub:
                         pass
                 
                 self.logs[name].append(msg)
-                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
+                if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
                 
                 proc = subprocess.Popen(
                     service_cfg["cmd"],
@@ -203,7 +210,7 @@ class LogHub:
                     if stripped and not any(x in stripped for x in ["DeprecationWarning", "warn(", "Use `plugin`"]):
                         self.logs[name].append(stripped)
                         if getattr(self, "is_headless", False):
-                            print(f"[{name}] {stripped}", flush=True)
+                            self.console.print(f"[{name}] {stripped}")
                 
                 if not self.running:
                     break
@@ -211,14 +218,14 @@ class LogHub:
                 exit_code = proc.poll()
                 msg = f"⚠️ [SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s..."
                 self.logs[name].append(msg)
-                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
+                if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
                 time.sleep(3) 
                 
             except Exception as e:
                 if not self.running: break
                 msg = f"❌ [SYSTEM] Error in {name}: {str(e)}. Retrying in 5s..."
                 self.logs[name].append(msg)
-                if getattr(self, "is_headless", False): print(f"[{name}] {msg}", flush=True)
+                if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
                 time.sleep(5)
 
     def stop_all_services(self):
@@ -226,7 +233,7 @@ class LogHub:
         if not self.processes: return # Already cleaned up
         
         self.running = False
-        print("\nStopping background services...")
+        self.console.print("\nStopping background services...")
         for name, proc in self.processes.items():
             if proc.poll() is None:
                 try:
@@ -238,7 +245,7 @@ class LogHub:
                 except Exception:
                     pass
         self.processes.clear() # Clear the dict so atexit doesn't run it twice
-        print("✅ All systems stopped.")
+        self.console.print("✅ All systems stopped.")
 
     def make_layout(self):
         layout = Layout()
@@ -300,7 +307,7 @@ class LogHub:
             time.sleep(0.3)
 
         if getattr(self, "is_headless", False):
-            print("\n[SYSTEM] Headless mode detected. TUI bypassed. Services running continuously in background...")
+            self.console.print("\n[SYSTEM] Headless mode detected. TUI bypassed. Services running continuously in background...")
             try:
                 while self.running:
                     time.sleep(1)
@@ -355,7 +362,7 @@ def launch_hub(include_mobile=False):
     
     if include_mobile:
         emulator_id = "Medium_Phone_API_36.1"
-        print(f"[SCREEN] Launching emulator: {emulator_id}")
+        console.print(f"[SCREEN] Launching emulator: {emulator_id}")
         try:
             subprocess.Popen(
                 ["flutter", "emulators", "--launch", emulator_id],
@@ -364,16 +371,16 @@ def launch_hub(include_mobile=False):
                 shell=True
             )
             # Wait for boot
-            print("[WAIT] Waiting 15s for emulator to boot...")
+            console.print("[WAIT] Waiting 15s for emulator to boot...")
             time.sleep(15)
         except Exception:
-            print("[WARN] Emulator launch failed. Proceeding with Hub only.")
+            console.print("[WARN] Emulator launch failed. Proceeding with Hub only.")
 
     try:
         hub = LogHub(include_mobile=include_mobile)
         hub.run()
     except Exception as e:
-        print(f"FAILED TO START SYSTEM: {e}")
+        console.print(f"FAILED TO START SYSTEM: {e}")
 
 def main_mobile():
     """CLI Entry Point for the mobile launcher."""

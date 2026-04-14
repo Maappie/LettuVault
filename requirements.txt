@@ -1,3 +1,4 @@
+# Python Version: 3.10.11
 # --- CORE BACKEND & WEB ---
 fastapi==0.129.0
 uvicorn==0.40.0

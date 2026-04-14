@@ -31,14 +31,36 @@ class SysConfigPanel extends StatelessWidget {
             _ConfigSlider('Target Temp',  ctrl.sysConfigTemp,  0,   60,   Colors.redAccent,  ctrl.setSysConfigTemp),
             _ConfigSlider('Target Humid', ctrl.sysConfigHum,   50,  100,  Colors.blueAccent, ctrl.setSysConfigHum),
             _ConfigSlider('Target Pres',  ctrl.sysConfigPres,  800, 1100, Colors.amber,      ctrl.setSysConfigPres),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: Text(
-                '⚠ System Config is UI-only. Backend changes not applied yet.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+            if (ctrl.sysConfigError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  ctrl.sysConfigError!,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                  textAlign: TextAlign.center,
                 ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: FilledButton.icon(
+                onPressed: ctrl.isSavingSysConfig ? null : () async {
+                  final focus = FocusScope.of(context);
+                  focus.unfocus();
+                  final success = await ctrl.saveSysConfig();
+                  if (success && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('System config synced to hardware!'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                icon: ctrl.isSavingSysConfig 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.cloud_upload),
+                label: Text(ctrl.isSavingSysConfig ? 'Saving...' : 'Apply Details'),
               ),
             ),
           ],

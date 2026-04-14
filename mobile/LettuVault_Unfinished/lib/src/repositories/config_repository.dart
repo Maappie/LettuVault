@@ -20,4 +20,14 @@ class ConfigRepository {
     }
     return null;
   }
+
+  /// Saves a new system config to the backend.
+  Future<void> saveConfig({double? temperature, double? humidity, double? pressure}) async {
+    final body = {
+      if (temperature != null) 'temperature': temperature,
+      if (humidity != null) 'humidity': humidity,
+      if (pressure != null) 'pressure': pressure,
+    };
+    await _client.post('/system_config', body);
+  }
 }
