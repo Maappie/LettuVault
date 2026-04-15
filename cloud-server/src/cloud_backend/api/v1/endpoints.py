@@ -189,34 +189,65 @@ import json
 
 @router.post(
     "/test-camera",
-    dependencies=[Depends(require_mobile_key)],
     summary="[Mobile] Queue a test picture trigger for a Vault.",
 )
-def trigger_test_camera(vault_id: str, db: Session = Depends(get_db)):
+def trigger_test_camera(
+    vault_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
+):
     repo = CloudRepository(db)
-    cmd = repo.enqueue_command(vault_id, "FORCE_TEST_CAPTURE")
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+    
+    if not target_vault:
+        raise HTTPException(status_code=400, detail="No vault_id provided and could not determine vault from user profile.")
+        
+    cmd = repo.enqueue_command(target_vault, "FORCE_TEST_CAPTURE")
     return {"message": "Command queued", "command_id": cmd.id}
 
 
 @router.post(
     "/trigger-produce-scan",
-    dependencies=[Depends(require_mobile_key)],
     summary="[Mobile] Queue a produce scan trigger for a Vault.",
 )
-def trigger_produce_scan(vault_id: str, db: Session = Depends(get_db)):
+def trigger_produce_scan(
+    vault_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
+):
     repo = CloudRepository(db)
-    cmd = repo.enqueue_command(vault_id, "TRIGGER_PRODUCE_SCAN")
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+    
+    if not target_vault:
+        raise HTTPException(status_code=400, detail="No vault_id provided and could not determine vault from user profile.")
+        
+    cmd = repo.enqueue_command(target_vault, "TRIGGER_PRODUCE_SCAN")
     return {"message": "Command queued", "command_id": cmd.id}
 
 
 @router.post(
     "/system_config",
-    dependencies=[Depends(require_mobile_key)],
     summary="[Mobile] Queue a System Config update for a Vault.",
 )
-def save_system_config(config_in: dict, vault_id: str, db: Session = Depends(get_db)):
+def save_system_config(
+    config_in: dict,
+    vault_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
+):
     repo = CloudRepository(db)
-    cmd = repo.enqueue_command(vault_id, "SYS_CONFIG", json.dumps(config_in))
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+    
+    if not target_vault:
+        raise HTTPException(status_code=400, detail="No vault_id provided and could not determine vault from user profile.")
+        
+    cmd = repo.enqueue_command(target_vault, "SYS_CONFIG", json.dumps(config_in))
     return {"message": "Config queued for broadcast", "command_id": cmd.id}
 
 

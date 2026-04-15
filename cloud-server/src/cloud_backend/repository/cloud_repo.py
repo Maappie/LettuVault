@@ -86,6 +86,16 @@ class CloudRepository:
 
     def get_all_users(self) -> list[CloudUser]:
         return self.db.query(CloudUser).order_by(CloudUser.created_at.desc()).all()
+        
+    def get_vault_id_by_email(self, email: str) -> str | None:
+        """Finds the most recent vault_id this user interacted with."""
+        latest_config = self.db.query(CloudSystemConfig)\
+            .filter(CloudSystemConfig.user_email == email)\
+            .order_by(CloudSystemConfig.timestamp.desc())\
+            .first()
+        if latest_config:
+            return latest_config.vault_id
+        return None
 
     # ── Command Queue (Remote Hardware Actions) ──────────────────────────────
 

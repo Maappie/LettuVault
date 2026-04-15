@@ -178,7 +178,13 @@ def _encode_image_b64(image_path: str) -> str:
         return image_path
     
     # Try looking relative to the lettuvault repository root
-    full_path = Path(__file__).parent / image_path
+    # Local path from DB is like 'captures/scan_xxx.jpg', but actual disk path is inside 'data/'
+    full_path = Path(__file__).parent / "data" / image_path
+    
+    if not full_path.exists():
+        # Fallback just in case some paths actually start with data/
+        full_path = Path(__file__).parent / image_path
+
     if full_path.exists():
         try:
             with open(full_path, "rb") as f:
@@ -324,9 +330,10 @@ def poll_and_execute_commands():
         commands = response.json()
         
         if not commands:
-            return
+            return False
             
         logger.info(f"📥  Downloaded {len(commands)} pending commands from Cloud.")
+        executed_any = False
         
         for cmd in commands:
             c_type = cmd.get("command_type")
@@ -358,14 +365,18 @@ def poll_and_execute_commands():
                 )
                 ack_res.raise_for_status()
                 logger.info(f"✅  Command {c_id} acknowledged.")
+                executed_any = True
                 
             except requests.exceptions.RequestException as e:
                 logger.error(f"❌  Failed to execute/ACK local command {c_type}: {e}")
                 
+        return executed_any
+        
     except requests.exceptions.RequestException:
-        pass # Silently fail on network error, we will retry next cycle
+        return False # Silently fail on network error, we will retry next cycle
     except Exception as e:
         logger.error(f"❌  Unexpected error polling commands: {e}")
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -400,16 +411,18 @@ def main():
                 save_state(state)
                 
                 # Check for remote commands right after syncing
-                poll_and_execute_commands()
+                commands_executed = poll_and_execute_commands()
 
                 # ── DYNAMIC CATCH-UP LOGIC ──────────────────────────────────────
                 # If we hit the BATCH_SIZE limit on ANY of the tables, there is 
                 # almost certainly a giant backlog of rows waiting behind them.
-                # Instead of waiting a full minute, we turbo-sync every 5 seconds 
-                # until the backlog is completely burned down.
-                if records_sent >= BATCH_SIZE:
-                    logger.info("🔥 Backlog detected! Pushing the next batch in 5 seconds...")
-                    time.sleep(5)
+                # If we executed a command, the photo was just taken, so we should push it instantly!
+                if records_sent >= BATCH_SIZE or commands_executed:
+                    if commands_executed:
+                        logger.info("🔥 Command executed! Pushing the resulting snapshot back to cloud in 3 seconds...")
+                    else:
+                        logger.info("🔥 Backlog detected! Pushing the next batch in 3 seconds...")
+                    time.sleep(3)
                 else:
                     time.sleep(SYNC_INTERVAL_SECS)
 

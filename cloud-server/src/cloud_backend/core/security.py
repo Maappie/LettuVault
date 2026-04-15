@@ -54,7 +54,7 @@ def require_sync_key(key: str = Security(_sync_key_header)):
         raise HTTPException(status_code=403, detail="Invalid sync API key")
 
 
-def require_mobile_key(request: Request, key: str = Security(_mobile_key_header)):
+def require_mobile_key(request: Request, key: str = Security(_mobile_key_header)) -> str | None:
     """
     Dual-mode auth guard for all mobile-facing GET endpoints.
 
@@ -63,22 +63,21 @@ def require_mobile_key(request: Request, key: str = Security(_mobile_key_header)
                              (sent as 'Authorization: Bearer <token>')
       2. X-MOBILE-API-KEY → static key for backwards-compat / simulator testing
 
-    Both local cloud-server (port 8001) and deployed Render instance use this
-    same guard, so no code changes are required when switching environments.
+    Returns the user's email if authenticated via JWT, otherwise returns None.
     """
     # --- Path 1: JWT Bearer Token (Mobile App — Online Mode) ---
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer "):].strip()
-        if token:  # Only validate if token is non-empty
+        if token:
             # decode_access_token raises 401 automatically on failure
-            decode_access_token(token)
-            return  # ✅ JWT is valid — allow through
+            email = decode_access_token(token)
+            return email  # ✅ JWT is valid — return email
         # Empty bearer string → fall through to API key check
 
     # --- Path 2: Static API Key (Simulator / Manual Testing) ---
     if key and key == settings.CLOUD_MOBILE_API_KEY:
-        return  # ✅ Key matches — allow through
+        return None  # ✅ Key matches — return None
 
     # --- Nothing matched ---
     raise HTTPException(
