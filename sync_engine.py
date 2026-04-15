@@ -85,8 +85,9 @@ def save_state(state: dict):
 def is_online(host: str = "8.8.8.8", port: int = 53, timeout: int = 3) -> bool:
     """Returns True if we can reach Google's DNS — lightweight internet check."""
     try:
-        socket.setdefaulttimeout(timeout)
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect((host, port))
         return True
     except (socket.error, OSError):
         return False
@@ -275,7 +276,7 @@ def run_sync(state: dict) -> tuple[dict, int]:
             sync_endpoint_url,
             json=payload,
             headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
-            timeout=30,
+            timeout=10,  # Reduced from 30s — unblocks the loop faster on slow responses
         )
         response.raise_for_status()
         result = response.json()
@@ -324,7 +325,7 @@ def poll_and_execute_commands():
         response = requests.get(
             commands_url,
             headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
-            timeout=10
+            timeout=(3, 5),  # connect=3s, read=5s — avoids 20s double-block
         )
         response.raise_for_status()
         commands = response.json()
@@ -383,6 +384,23 @@ def poll_and_execute_commands():
 # MAIN LOOP
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _keep_render_alive():
+    """
+    Pings the Render health endpoint every 10 minutes to prevent cold starts.
+    Render free tier spins down after 15 min of inactivity — causing 30-60s delays.
+    This background thread keeps it warm.
+    """
+    ping_url = f"{CLOUD_SYNC_URL.rstrip('/')}/cloud-server-health"
+    ping_interval = 10 * 60  # 10 minutes
+    while True:
+        try:
+            time.sleep(ping_interval)
+            r = requests.get(ping_url, timeout=15)
+            logger.info(f"🏓  Render keep-alive ping: {r.status_code}")
+        except Exception:
+            pass  # Silent fail — this is best-effort only
+
+
 def main():
     # ── Startup validation ────────────────────────────────────────────────────
     if not VAULT_ID or VAULT_ID == "VAULT_UNKNOWN":
@@ -399,6 +417,12 @@ def main():
     logger.info(f"🗄️   Local DB : {LOCAL_DB_PATH}")
     logger.info(f"☁️   Cloud URL: {CLOUD_SYNC_URL}")
 
+    # Start Render keep-alive thread (prevents 30-60s cold start delays)
+    import threading
+    _ping_thread = threading.Thread(target=_keep_render_alive, daemon=True)
+    _ping_thread.start()
+    logger.info("🏓  Render keep-alive thread started (pings every 10 min)")
+
     state = load_state()
 
     while True:
@@ -407,23 +431,23 @@ def main():
                 logger.warning("📡  No internet connection — skipping sync cycle.")
                 time.sleep(SYNC_INTERVAL_SECS)
             else:
+                logger.info("🔄  Starting sync cycle...")
                 state, records_sent = run_sync(state)
                 save_state(state)
-                
-                # Check for remote commands right after syncing
+
+                logger.info("📡  Checking for remote commands...")
                 commands_executed = poll_and_execute_commands()
 
                 # ── DYNAMIC CATCH-UP LOGIC ──────────────────────────────────────
-                # If we hit the BATCH_SIZE limit on ANY of the tables, there is 
-                # almost certainly a giant backlog of rows waiting behind them.
-                # If we executed a command, the photo was just taken, so we should push it instantly!
+                turbo_sleep = max(1, SYNC_INTERVAL_SECS // 2)
                 if records_sent >= BATCH_SIZE or commands_executed:
                     if commands_executed:
-                        logger.info("🔥 Command executed! Pushing the resulting snapshot back to cloud in 3 seconds...")
+                        logger.info(f"🔥 Command executed! Next sync in {turbo_sleep}s...")
                     else:
-                        logger.info("🔥 Backlog detected! Pushing the next batch in 3 seconds...")
-                    time.sleep(3)
+                        logger.info(f"🔥 Backlog detected! Next batch in {turbo_sleep}s...")
+                    time.sleep(turbo_sleep)
                 else:
+                    logger.info(f"💤  Sleeping {SYNC_INTERVAL_SECS}s until next cycle...")
                     time.sleep(SYNC_INTERVAL_SECS)
 
         except KeyboardInterrupt:

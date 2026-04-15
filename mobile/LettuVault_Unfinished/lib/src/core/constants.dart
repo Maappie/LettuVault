@@ -28,15 +28,15 @@ const int kDashboardPollIntervalSeconds = 10;
 // How far a sensor reading can drift from the target before the card turns red.
 
 // Temperature
-const double kTempTolerance    = 1.5;
+const double kTempTolerance = 1.5;
 const double kTempMaxDeviation = 5.0;
 
 // Humidity
-const double kHumTolerance    = 3.0;
+const double kHumTolerance = 3.0;
 const double kHumMaxDeviation = 10.0;
 
 // Pressure
-const double kPresTolerance    = 20.0;
+const double kPresTolerance = 20.0;
 const double kPresMaxDeviation = 100.0;
 
 // ── Developer Mode ──────────────────────────────────────────────────────────

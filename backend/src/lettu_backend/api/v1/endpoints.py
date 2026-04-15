@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from lettu_backend.core.config import settings
 from lettu_backend.core.security import get_current_active_device
@@ -26,14 +26,24 @@ def get_db():
 
 # --- 🧠 AI SCAN ENDPOINTS ---
 @router.get("/ai-scans/condition", response_model=list[AIConditionResponse], dependencies=[Depends(get_current_active_device)])
-def get_condition_scans(db: Session = Depends(get_db)):
+def get_condition_scans(request: Request, db: Session = Depends(get_db)):
     repo = DataRepository(db)
-    return repo.get_all_condition_scans()
+    scans = repo.get_all_condition_scans()
+    base_url = str(request.base_url).rstrip("/")
+    for s in scans:
+        if s.image and not s.image.startswith("http"):
+            s.image = f"{base_url}/{s.image}"
+    return scans
 
 @router.get("/ai-scans/produce", response_model=list[AIProduceResponse], dependencies=[Depends(get_current_active_device)])
-def get_produce_scans(db: Session = Depends(get_db)):
+def get_produce_scans(request: Request, db: Session = Depends(get_db)):
     repo = DataRepository(db)
-    return repo.get_all_produce_scans()
+    scans = repo.get_all_produce_scans()
+    base_url = str(request.base_url).rstrip("/")
+    for s in scans:
+        if s.image and not s.image.startswith("http"):
+            s.image = f"{base_url}/{s.image}"
+    return scans
 
 @router.post("/ai-scans", dependencies=[Depends(get_current_active_device)])
 def create_ai_scan(scan_in: dict, db: Session = Depends(get_db)):

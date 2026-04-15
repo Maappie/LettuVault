@@ -4,9 +4,10 @@ import 'package:my_new_app/shared/widgets/app_top_bar.dart';
 import 'package:my_new_app/shared/widgets/metric_card.dart';
 import 'package:my_new_app/features/dashboard/widgets/api_status_banner.dart';
 import 'package:my_new_app/features/dashboard/widgets/sensor_summary_card.dart';
-import 'package:my_new_app/features/dashboard/widgets/camera_preview_card.dart';
 import 'package:my_new_app/features/dashboard/widgets/produce_scan_button.dart';
 import 'package:my_new_app/features/dashboard/widgets/recent_scans_widget.dart';
+import 'package:my_new_app/features/dashboard/widgets/recent_condition_scans_widget.dart';
+import 'package:my_new_app/src/repositories/ai_repository.dart';
 
 /// DashboardScreen — main landing screen.
 ///
@@ -67,15 +68,80 @@ class DashboardScreen extends StatelessWidget {
                 dangerLevel: presDanger,
                 trend: trendP,
               ),
-              SectionHeader('AI PRODUCE SCANNER'),
-              const ProduceScanButton(),
+              SectionHeader('SCANS & ACTIONS'),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Row(
+                  children: [
+                    Expanded(child: const ProduceScanButton()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _TestCameraButtonWidget(),
+                    ),
+                  ],
+                ),
+              ),
+              SectionHeader('PRODUCE SCANS'),
               const RecentProduceScansWidget(),
-              SectionHeader('LIVE CAMERA'),
-              const CameraPreviewCard(),
+              SectionHeader('CONDITION SCANS (WORMS & WILTING)'),
+              const RecentConditionScansWidget(),
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _TestCameraButtonWidget extends StatefulWidget {
+  @override
+  State<_TestCameraButtonWidget> createState() => _TestCameraButtonWidgetState();
+}
+
+class _TestCameraButtonWidgetState extends State<_TestCameraButtonWidget> {
+  final AiRepository _repo = AiRepository();
+  bool _isRequesting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(double.infinity, 56),
+        backgroundColor: Theme.of(context).colorScheme.secondary,
+        foregroundColor: Theme.of(context).colorScheme.onSecondary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      onPressed: _isRequesting ? null : () async {
+        setState(() => _isRequesting = true);
+        try {
+          await _repo.testCamera();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Test Camera Triggered!'), backgroundColor: Colors.green),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isRequesting = false);
+          }
+        }
+      },
+      icon: _isRequesting 
+          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+          : const Icon(Icons.camera_alt),
+      label: Text(
+        _isRequesting ? 'REQ...' : 'VIEW INSIDE',
+        style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }

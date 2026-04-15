@@ -31,4 +31,16 @@ class AiRepository {
       return [];
     }
   }
+
+  /// Fetches the latest condition scans (worms/wilting), up to [limit].
+  Future<List<AiConditionScan>> getConditionScans({int limit = 3}) async {
+    try {
+      final List<dynamic> data = await _client.get('/ai-scans/condition');
+      final allScans = data.map((json) => AiConditionScan.fromJson(json as Map<String, dynamic>)).toList();
+      allScans.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return allScans.take(limit).toList();
+    } catch (e) {
+      return [];
+    }
+  }
 }

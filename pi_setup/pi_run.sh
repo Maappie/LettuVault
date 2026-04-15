@@ -32,6 +32,15 @@ pkill -f "sync_engine"
 # Set Python Path
 export PYTHONPATH="$REPO_PATH/backend/src:$REPO_PATH/ai_system/src:$PYTHONPATH"
 
+# 🗄️ Apply any pending database migrations (safe to run every boot — idempotent)
+echo "🗄️  Applying database migrations..."
+$PYTHON -m alembic -c "$REPO_PATH/backend/alembic.ini" upgrade head
+if [ $? -ne 0 ]; then
+    echo "❌ ERROR: Database migration failed. Aborting startup."
+    exit 1
+fi
+echo "✅ Database schema is up to date."
+
 # Function to handle shutdown
 cleanup() {
     echo -e "\n🛑 Shutting down LettuVault..."

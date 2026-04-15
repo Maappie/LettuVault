@@ -56,9 +56,9 @@ class AIActivityHandler:
             api_client.send_to_api("ai-scans", produce_payload)
             logger.info("🥗 [SUBSCRIBER] Posted AI Produce detection to API")
         else:
-            # --- DEBOUNCE: 10-second Backend Lock ---
+            # --- DEBOUNCE: 30-second Backend Cooldown ---
             now_ts = datetime.datetime.now().timestamp()
-            if now_ts - self.last_condition_time < 10.0:
+            if now_ts - self.last_condition_time < 30.0:
                 logger.warning("🚫 [SUBSCRIBER] Condition Scan ignored (Debounce Lock)")
                 return
             self.last_condition_time = now_ts
