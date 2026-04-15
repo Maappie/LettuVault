@@ -84,3 +84,12 @@ class SyncResult(BaseModel):
     produce_scans_saved: int
     system_configs_saved: int
     message: str = "Sync completed"
+
+class PendingCommandResponse(BaseModel):
+    id: int
+    command_type: str
+    payload_json: Optional[str] = None
+    created_at: datetime
+
+class CommandAckRequest(BaseModel):
+    command_id: int

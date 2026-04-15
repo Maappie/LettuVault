@@ -301,6 +301,73 @@ def run_sync(state: dict) -> tuple[dict, int]:
     return state, 0
 
 
+# ── COMMAND POLLING (Top-Down execution) ──────────────────────────────────────
+
+def poll_and_execute_commands():
+    """
+    Queries the Cloud for pending commands, executes them locally via localhost APIs,
+    and ACKs them back to the Cloud once complete.
+    """
+    base_url = CLOUD_SYNC_URL.rstrip("/")
+    commands_url = f"{base_url}/api/v1/sync/commands/{VAULT_ID}"
+    ack_url = f"{base_url}/api/v1/sync/commands/ack"
+    
+    local_api_base = "http://localhost:8000/api/v1"
+    
+    try:
+        response = requests.get(
+            commands_url,
+            headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
+            timeout=10
+        )
+        response.raise_for_status()
+        commands = response.json()
+        
+        if not commands:
+            return
+            
+        logger.info(f"📥  Downloaded {len(commands)} pending commands from Cloud.")
+        
+        for cmd in commands:
+            c_type = cmd.get("command_type")
+            c_id = cmd.get("id")
+            c_payload = cmd.get("payload_json")
+            
+            logger.info(f"⚡  Executing remote command: {c_type} (ID: {c_id})")
+            
+            try:
+                # Dispatch locally
+                headers = {"X-API-KEY": os.getenv("X_API_KEY", "")}
+                
+                if c_type == "FORCE_TEST_CAPTURE":
+                    requests.post(f"{local_api_base}/test-camera", headers=headers, timeout=5)
+                elif c_type == "TRIGGER_PRODUCE_SCAN":
+                    requests.post(f"{local_api_base}/trigger-produce-scan", headers=headers, timeout=5)
+                elif c_type == "SYS_CONFIG":
+                    if c_payload:
+                        requests.post(f"{local_api_base}/system_config", json=json.loads(c_payload), headers=headers, timeout=10)
+                else:
+                    logger.warning(f"⚠️  Unknown command type from cloud: {c_type}")
+                
+                # Acknowledge completion back to cloud
+                ack_res = requests.post(
+                    ack_url,
+                    json={"command_id": c_id},
+                    headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
+                    timeout=5
+                )
+                ack_res.raise_for_status()
+                logger.info(f"✅  Command {c_id} acknowledged.")
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"❌  Failed to execute/ACK local command {c_type}: {e}")
+                
+    except requests.exceptions.RequestException:
+        pass # Silently fail on network error, we will retry next cycle
+    except Exception as e:
+        logger.error(f"❌  Unexpected error polling commands: {e}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN LOOP
 # ─────────────────────────────────────────────────────────────────────────────
@@ -331,6 +398,9 @@ def main():
             else:
                 state, records_sent = run_sync(state)
                 save_state(state)
+                
+                # Check for remote commands right after syncing
+                poll_and_execute_commands()
 
                 # ── DYNAMIC CATCH-UP LOGIC ──────────────────────────────────────
                 # If we hit the BATCH_SIZE limit on ANY of the tables, there is 

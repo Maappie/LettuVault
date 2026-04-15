@@ -11,7 +11,10 @@ from datetime import datetime
 
 from cloud_backend.core.security import require_sync_key, require_mobile_key, hash_password, verify_password, create_access_token
 from cloud_backend.models.database import SessionLocal
-from cloud_backend.models.domain import SyncBatchPayload, SyncResult, AuthRequest, AuthResponse
+from cloud_backend.models.domain import (
+    SyncBatchPayload, SyncResult, AuthRequest, AuthResponse,
+    PendingCommandResponse, CommandAckRequest, SyncSystemConfig
+)
 from cloud_backend.repository.cloud_repo import CloudRepository
 
 router = APIRouter(tags=["Cloud API v1"])
@@ -96,6 +99,32 @@ def sync_vault_data(batch: SyncBatchPayload, db: Session = Depends(get_db)):
         message=f"Sync accepted: {sensors_saved} sensors, {condition_saved} conditions, {produce_saved} produce, {configs_saved} configs."
     )
 
+# ── GET/POST /sync/commands (Edge Vault queries the queue) ────────────────────
+
+@router.get(
+    "/sync/commands/{vault_id}",
+    response_model=list[PendingCommandResponse],
+    dependencies=[Depends(require_sync_key)],
+    summary="Edge Vault → Cloud: Retrieve pending hardware commands.",
+)
+def fetch_pending_commands(vault_id: str, db: Session = Depends(get_db)):
+    repo = CloudRepository(db)
+    cmds = repo.get_pending_commands(vault_id=vault_id)
+    return [PendingCommandResponse(
+        id=c.id, command_type=c.command_type, payload_json=c.payload_json, created_at=c.created_at
+    ) for c in cmds]
+
+
+@router.post(
+    "/sync/commands/ack",
+    dependencies=[Depends(require_sync_key)],
+    summary="Edge Vault → Cloud: Acknowledge command execution.",
+)
+def ack_command(req: CommandAckRequest, db: Session = Depends(get_db)):
+    repo = CloudRepository(db)
+    repo.mark_command_delivered(req.command_id)
+    return {"message": "Command ACKed"}
+
 
 # ── GET endpoints (Mobile App reads the cloud mirror) ─────────────────────────
 # All mobile-facing endpoints use X-MOBILE-API-KEY — separate from the sync key.
@@ -153,6 +182,42 @@ def get_latest_system_config(
 ):
     repo = CloudRepository(db)
     return repo.get_latest_system_config(vault_id=vault_id)
+
+
+# ── Remote Hardware Action Endpoints (Mobile App → Cloud Queue) ───────────────
+import json
+
+@router.post(
+    "/test-camera",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] Queue a test picture trigger for a Vault.",
+)
+def trigger_test_camera(vault_id: str, db: Session = Depends(get_db)):
+    repo = CloudRepository(db)
+    cmd = repo.enqueue_command(vault_id, "FORCE_TEST_CAPTURE")
+    return {"message": "Command queued", "command_id": cmd.id}
+
+
+@router.post(
+    "/trigger-produce-scan",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] Queue a produce scan trigger for a Vault.",
+)
+def trigger_produce_scan(vault_id: str, db: Session = Depends(get_db)):
+    repo = CloudRepository(db)
+    cmd = repo.enqueue_command(vault_id, "TRIGGER_PRODUCE_SCAN")
+    return {"message": "Command queued", "command_id": cmd.id}
+
+
+@router.post(
+    "/system_config",
+    dependencies=[Depends(require_mobile_key)],
+    summary="[Mobile] Queue a System Config update for a Vault.",
+)
+def save_system_config(config_in: dict, vault_id: str, db: Session = Depends(get_db)):
+    repo = CloudRepository(db)
+    cmd = repo.enqueue_command(vault_id, "SYS_CONFIG", json.dumps(config_in))
+    return {"message": "Config queued for broadcast", "command_id": cmd.id}
 
 
 # ── Auth Endpoints (Mobile App → Cloud) ───────────────────────────────────────────────

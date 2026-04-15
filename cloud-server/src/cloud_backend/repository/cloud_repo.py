@@ -8,6 +8,7 @@ from cloud_backend.models.database import (
     CloudAIProduceScan,
     CloudSystemConfig,
     CloudUser,
+    CloudCommandQueue,
 )
 from cloud_backend.models.domain import (
     SyncSensorReading,
@@ -85,3 +86,31 @@ class CloudRepository:
 
     def get_all_users(self) -> list[CloudUser]:
         return self.db.query(CloudUser).order_by(CloudUser.created_at.desc()).all()
+
+    # ── Command Queue (Remote Hardware Actions) ──────────────────────────────
+
+    def enqueue_command(self, vault_id: str, command_type: str, payload_json: str | None = None) -> CloudCommandQueue:
+        cmd = CloudCommandQueue(
+            vault_id=vault_id,
+            command_type=command_type,
+            payload_json=payload_json,
+            status="PENDING"
+        )
+        self.db.add(cmd)
+        self.db.commit()
+        self.db.refresh(cmd)
+        return cmd
+
+    def get_pending_commands(self, vault_id: str) -> list[CloudCommandQueue]:
+        return self.db.query(CloudCommandQueue)\
+            .filter(CloudCommandQueue.vault_id == vault_id, CloudCommandQueue.status == "PENDING")\
+            .order_by(CloudCommandQueue.created_at.asc())\
+            .all()
+
+    def mark_command_delivered(self, command_id: int):
+        from datetime import datetime
+        cmd = self.db.query(CloudCommandQueue).filter(CloudCommandQueue.id == command_id).first()
+        if cmd:
+            cmd.status = "DELIVERED"
+            cmd.delivered_at = datetime.utcnow()
+            self.db.commit()

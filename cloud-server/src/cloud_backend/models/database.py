@@ -86,3 +86,15 @@ class CloudUser(Base):
     password_hash = Column(String, nullable=False)
     is_active     = Column(Boolean, default=True)
     created_at    = Column(DateTime, default=utc_now)
+
+# ── Cloud Command Queue (Remote Hardware Actions) ────────────────────────────────────────────
+class CloudCommandQueue(Base):
+    __tablename__ = "cloud_command_queue"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    vault_id      = Column(String, nullable=False, index=True)
+    command_type  = Column(String, nullable=False) # e.g., 'TRIGGER_PRODUCE_SCAN', 'SYS_CONFIG'
+    payload_json  = Column(String, nullable=True)  # JSON string for arguments
+    status        = Column(String, default="PENDING", index=True) # PENDING, DELIVERED
+    created_at    = Column(DateTime, default=utc_now)
+    delivered_at  = Column(DateTime, nullable=True)
