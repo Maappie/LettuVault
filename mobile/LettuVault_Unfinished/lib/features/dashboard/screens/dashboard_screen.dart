@@ -5,6 +5,8 @@ import 'package:my_new_app/shared/widgets/metric_card.dart';
 import 'package:my_new_app/features/dashboard/widgets/api_status_banner.dart';
 import 'package:my_new_app/features/dashboard/widgets/sensor_summary_card.dart';
 import 'package:my_new_app/features/dashboard/widgets/camera_preview_card.dart';
+import 'package:my_new_app/features/dashboard/widgets/produce_scan_button.dart';
+import 'package:my_new_app/features/dashboard/widgets/recent_scans_widget.dart';
 
 /// DashboardScreen — main landing screen.
 ///
@@ -65,6 +67,9 @@ class DashboardScreen extends StatelessWidget {
                 dangerLevel: presDanger,
                 trend: trendP,
               ),
+              SectionHeader('AI PRODUCE SCANNER'),
+              const ProduceScanButton(),
+              const RecentProduceScansWidget(),
               SectionHeader('LIVE CAMERA'),
               const CameraPreviewCard(),
             ],

@@ -4,6 +4,10 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+import os
+import base64
+import requests
+from datetime import datetime
 
 from cloud_backend.core.security import require_sync_key, require_mobile_key, hash_password, verify_password, create_access_token
 from cloud_backend.models.database import SessionLocal
@@ -35,6 +39,49 @@ def sync_vault_data(batch: SyncBatchPayload, db: Session = Depends(get_db)):
     Requires: X-SYNC-API-KEY header matching CLOUD_SYNC_API_KEY in .env
     """
     repo = CloudRepository(db)
+
+    def _process_image_uploads(scans):
+        """Intercepts local images encoded as base64, uploads them to Supabase S3, and replaces the payload URL."""
+        if not scans:
+            return
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        supabase_bucket = os.getenv("SUPABASE_BUCKET", "lettu-captures")
+        
+        for scan in scans:
+            if scan.image and scan.image.startswith("b64:"):
+                # If Supabase is not configured on the cloud server, we drop the image to save DB space
+                if not supabase_url or not supabase_key:
+                    scan.image = None
+                    continue
+                
+                try:
+                    raw_b64 = scan.image.replace("b64:", "", 1)
+                    image_bytes = base64.b64decode(raw_b64)
+                    
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                    filename = f"scan_{scan.vault_id}_{ts}.jpg"
+                    
+                    headers = {
+                        "Authorization": f"Bearer {supabase_key}",
+                        "apikey": supabase_key,
+                        "Content-Type": "image/jpeg"
+                    }
+                    url = f"{supabase_url.rstrip('/')}/storage/v1/object/{supabase_bucket}/{filename}"
+                    
+                    r = requests.post(url, headers=headers, data=image_bytes, timeout=10)
+                    if r.status_code in [200, 201]:
+                        # Assign the public Supabase URL
+                        scan.image = f"{supabase_url.rstrip('/')}/storage/v1/object/public/{supabase_bucket}/{filename}"
+                    else:
+                        scan.image = None # upload failed
+                except Exception:
+                    scan.image = None # decode or upload error
+
+    # Process uploads before saving
+    _process_image_uploads(batch.condition_scans)
+    _process_image_uploads(batch.produce_scans)
 
     sensors_saved   = repo.bulk_insert_sensor_readings(batch.sensor_readings)   if batch.sensor_readings   else 0
     condition_saved = repo.bulk_insert_condition_scans(batch.condition_scans)    if batch.condition_scans    else 0

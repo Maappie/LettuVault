@@ -11,6 +11,7 @@ logger = logging.getLogger("MQTT_SERVICE")
 
 # Folder where AI snapshots are stored (strictly relative to LettuVault root)
 from lettu_backend.core.config import CAPTURES_DIR
+
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 class AIActivityHandler:
@@ -32,7 +33,7 @@ class AIActivityHandler:
                 with open(filepath, "wb") as f:
                     f.write(base64.b64decode(image_b64))
                 image_rel_path = f"captures/{filename}"
-                logger.info(f"📸 [SUBSCRIBER] Snapshot saved: {image_rel_path}")
+                logger.info(f"📸 [SUBSCRIBER] Snapshot saved locally: {image_rel_path}")
             except Exception as img_err:
                 logger.warning(f"⚠️ [SUBSCRIBER] Could not save snapshot: {img_err}")
 

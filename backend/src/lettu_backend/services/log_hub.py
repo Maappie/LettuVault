@@ -58,23 +58,14 @@ def sweep_zombies():
                 if any(kw in cmd_str for kw in keywords):
                     try:
                         p.terminate()
-<<<<<<< Updated upstream
                         console.print(f"🧹 [ZOMBIE KILLER] Terminated old process PID: {p.pid}")
-=======
-                        print(f"[ZOMBIE KILLER] Terminated old process PID: {p.pid}")
->>>>>>> Stashed changes
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
         time.sleep(1) # Wait for OS to cleanup
     except ImportError:
-<<<<<<< Updated upstream
         console.print("[WARN] psutil not found, skipping deep zombie sweep.")
         
     console.print("[OK] System swept. Starting fresh.")
-=======
-        print("[WARN] psutil not found, skipping deep zombie sweep.")
-    print("[OK] System swept. Starting fresh.")
->>>>>>> Stashed changes
 
 def free_port(port):
     """Safely frees the port before starting, ignoring critical Windows System PIDs."""
@@ -189,14 +180,7 @@ class LogHub:
             try:
                 msg = f"(SYSTEM) Starting {name}..."
                 self.logs[name].append(msg)
-<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
-=======
-                if getattr(self, "is_headless", False): 
-                    # ASCII-safe print for headless mode to avoid codec crashes
-                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
-                    print(f"[{name}] {safe_msg}", flush=True)
->>>>>>> Stashed changes
                 
                 proc = subprocess.Popen(
                     service_cfg["cmd"],
@@ -220,13 +204,7 @@ class LogHub:
                     if stripped and not any(x in stripped for x in ["DeprecationWarning", "warn(", "Use `plugin`"]):
                         self.logs[name].append(stripped)
                         if getattr(self, "is_headless", False):
-<<<<<<< Updated upstream
                             self.console.print(f"[{name}] {stripped}")
-=======
-                            # ASCII-safe print for headless mode
-                            safe_stripped = stripped.encode('ascii', 'ignore').decode('ascii')
-                            print(f"[{name}] {safe_stripped}", flush=True)
->>>>>>> Stashed changes
                 
                 if not self.running:
                     break
@@ -234,26 +212,14 @@ class LogHub:
                 exit_code = proc.poll()
                 msg = f"[SYSTEM] {name} stopped (Code: {exit_code}). Restarting in 3s..."
                 self.logs[name].append(msg)
-<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
-=======
-                if getattr(self, "is_headless", False):
-                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
-                    print(f"[{name}] {safe_msg}", flush=True)
->>>>>>> Stashed changes
                 time.sleep(3) 
                 
             except Exception as e:
                 if not self.running: break
                 msg = f"[SYSTEM] Error in {name}: {str(e)}. Retrying in 5s..."
                 self.logs[name].append(msg)
-<<<<<<< Updated upstream
                 if getattr(self, "is_headless", False): self.console.print(f"[{name}] {msg}")
-=======
-                if getattr(self, "is_headless", False):
-                    safe_msg = msg.encode('ascii', 'ignore').decode('ascii')
-                    print(f"[{name}] {safe_msg}", flush=True)
->>>>>>> Stashed changes
                 time.sleep(5)
 
     def stop_all_services(self):
@@ -273,11 +239,7 @@ class LogHub:
                 except Exception:
                     pass
         self.processes.clear() # Clear the dict so atexit doesn't run it twice
-<<<<<<< Updated upstream
         self.console.print("✅ All systems stopped.")
-=======
-        print("All systems stopped.")
->>>>>>> Stashed changes
 
     def make_layout(self):
         layout = Layout()

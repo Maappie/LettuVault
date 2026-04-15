@@ -13,6 +13,7 @@
 #   ✅  Appends VAULT_ID from .env to every record
 # ─────────────────────────────────────────────────────────────────────────────
 
+import base64
 import json
 import logging
 import os
@@ -169,6 +170,25 @@ def build_sensor_payload(rows: list[dict]) -> list[dict]:
         for r in rows
     ]
 
+def _encode_image_b64(image_path: str) -> str:
+    """Read a local image file and encode it as a b64 string prefix."""
+    if not image_path:
+        return None
+    if image_path.startswith("http"):
+        return image_path
+    
+    # Try looking relative to the lettuvault repository root
+    full_path = Path(__file__).parent / image_path
+    if full_path.exists():
+        try:
+            with open(full_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+                return f"b64:{encoded}"
+        except Exception as e:
+            logger.warning(f"⚠️ Could not encode image {full_path}: {e}")
+    # Return original string if processing failed or file vanished
+    return image_path
+
 def build_condition_payload(rows: list[dict]) -> list[dict]:
     return [
         {
@@ -177,7 +197,7 @@ def build_condition_payload(rows: list[dict]) -> list[dict]:
             "worm_count":       r.get("worm_count", 0),
             "confidence_score": r.get("confidence_score"),
             "label":            r.get("label"),
-            "image":            r.get("image"),
+            "image":            _encode_image_b64(r.get("image")),
             "timestamp":        _format_ts(r["timestamp"]),
         }
         for r in rows
@@ -191,7 +211,7 @@ def build_produce_payload(rows: list[dict]) -> list[dict]:
             "produce_type":     r.get("produce_type"),
             "confidence_score": r.get("confidence_score"),
             "label":            r.get("label"),
-            "image":            r.get("image"),
+            "image":            _encode_image_b64(r.get("image")),
             "timestamp":        _format_ts(r["timestamp"]),
         }
         for r in rows
