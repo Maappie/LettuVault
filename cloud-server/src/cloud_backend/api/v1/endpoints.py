@@ -138,9 +138,14 @@ def list_sensor_readings(
     vault_id: Optional[str] = Query(None, description="Filter by vault ID"),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
 ):
     repo = CloudRepository(db)
-    return repo.get_sensor_readings(vault_id=vault_id, limit=limit)
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+    
+    return repo.get_sensor_readings(vault_id=target_vault, limit=limit)
 
 
 @router.get(
@@ -152,9 +157,14 @@ def list_condition_scans(
     vault_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
 ):
     repo = CloudRepository(db)
-    return repo.get_condition_scans(vault_id=vault_id, limit=limit)
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+        
+    return repo.get_condition_scans(vault_id=target_vault, limit=limit)
 
 
 @router.get(
@@ -166,9 +176,14 @@ def list_produce_scans(
     vault_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
 ):
     repo = CloudRepository(db)
-    return repo.get_produce_scans(vault_id=vault_id, limit=limit)
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+        
+    return repo.get_produce_scans(vault_id=target_vault, limit=limit)
 
 
 @router.get(
@@ -179,9 +194,14 @@ def list_produce_scans(
 def get_latest_system_config(
     vault_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
 ):
     repo = CloudRepository(db)
-    return repo.get_latest_system_config(vault_id=vault_id)
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+        
+    return repo.get_latest_system_config(vault_id=target_vault)
 
 
 # ── Remote Hardware Action Endpoints (Mobile App → Cloud Queue) ───────────────
