@@ -116,9 +116,12 @@ class OnboardingController extends ChangeNotifier {
       return;
     }
 
-    // Persist credentials
+    // Persist credentials — only save URL if it was a manual override,
+    // otherwise let connectivity_service auto-detect on each switch.
     await SecureStorage.savePiCredentials(ssid: ssid, password: password);
-    await prefs.setString('offline_base_url', baseUrl);
+    if (savedUrl.isNotEmpty) {
+      await prefs.setString('offline_base_url', baseUrl);
+    }
 
     _localSetupDone    = true;
     _localSetupSkipped = false;

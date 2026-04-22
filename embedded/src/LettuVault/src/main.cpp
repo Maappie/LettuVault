@@ -76,6 +76,13 @@ float set_temperature = 0.0;
 float set_humidity = 0.0;
 float set_pressure = 0.0;
 
+// --- SYSTEM STANDBY MODE ---
+// When all three setpoints are 0.0, the system enters standby:
+// - All relays are forced OFF
+// - Sensor telemetry stops publishing
+// - OLED shows STANDBY status
+volatile bool systemStandby = false;
+
 // --- MENU STATE MACHINE ---
 enum MenuPage {
     PAGE_HOME,
@@ -139,6 +146,10 @@ void updateDisplay() {
         case PAGE_HOME:
             display.print("WIFI:"); display.print(wifiState ? "OK" : "NO");
             display.print(" | MQTT:"); display.println(mqttState ? "OK" : "NO");
+            if (systemStandby) {
+                display.println(F("--- SYSTEM STANDBY ---"));
+                display.println(F("All controls OFF"));
+            }
             display.println(F("1. System Config"));
             display.println(F("2. System Read"));
             display.println(F("3. Network Config"));
@@ -249,25 +260,58 @@ void callback(char* topic, byte* payload, unsigned int length) {
             sendAckPending = true; 
         }
 
-        if (!doc["temperature"].isNull()) {
-            float new_temp = doc["temperature"].as<float>();
-            if (set_temperature != new_temp) {
-                lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS; 
-                Serial.printf("[HVAC] Target temp changed to %.1f. Lockout bypassed.\n", new_temp);
+        // --- SYSTEM OFF COMMAND: all values are 0 → enter standby ---
+        if (doc.containsKey("system_off") && doc["system_off"].as<bool>()) {
+            set_temperature = 0.0;
+            set_humidity = 0.0;
+            set_pressure = 0.0;
+            preferences.putFloat("set_temp", 0.0);
+            preferences.putFloat("set_hum", 0.0);
+            preferences.putFloat("set_pres", 0.0);
+            systemStandby = true;
+            preferences.putBool("standby", true);
+            
+            // Force all relays OFF immediately
+            digitalWrite(RELAY_COMPRESSOR, LOW);
+            isCompressorRunning = false;
+            digitalWrite(RELAY_VACUUM, HIGH);    // Active LOW: HIGH = OFF
+            isVacuumRunning = false;
+            digitalWrite(RELAY_HUMIDIFIER, HIGH); // Active LOW: HIGH = OFF
+            isHumidifierRunning = false;
+            
+            Serial.println(F("[SYSTEM] ⏹️ STANDBY MODE ACTIVATED — All controls OFF"));
+            forceDisplayUpdate = true;
+            changed = true;
+        } else {
+            if (!doc["temperature"].isNull()) {
+                float new_temp = doc["temperature"].as<float>();
+                if (set_temperature != new_temp) {
+                    lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS; 
+                    Serial.printf("[HVAC] Target temp changed to %.1f. Lockout bypassed.\n", new_temp);
+                }
+                set_temperature = new_temp;
+                preferences.putFloat("set_temp", set_temperature);
+                changed = true;
             }
-            set_temperature = new_temp;
-            preferences.putFloat("set_temp", set_temperature);
-            changed = true;
-        }
-        if (!doc["humidity"].isNull()) {
-            set_humidity = doc["humidity"].as<float>();
-            preferences.putFloat("set_hum", set_humidity);
-            changed = true;
-        }
-        if (!doc["pressure"].isNull()) {
-            set_pressure = doc["pressure"].as<float>();
-            preferences.putFloat("set_pres", set_pressure);
-            changed = true;
+            if (!doc["humidity"].isNull()) {
+                set_humidity = doc["humidity"].as<float>();
+                preferences.putFloat("set_hum", set_humidity);
+                changed = true;
+            }
+            if (!doc["pressure"].isNull()) {
+                set_pressure = doc["pressure"].as<float>();
+                preferences.putFloat("set_pres", set_pressure);
+                changed = true;
+            }
+            
+            // Any non-zero config exits standby
+            if (changed && (set_temperature > 0 || set_humidity > 0 || set_pressure > 0)) {
+                if (systemStandby) {
+                    systemStandby = false;
+                    preferences.putBool("standby", false);
+                    Serial.println(F("[SYSTEM] ▶️ STANDBY EXITED — Controls re-enabled"));
+                }
+            }
         }
         
         if (changed) {
@@ -369,6 +413,7 @@ void setup() {
     set_temperature = preferences.isKey("set_temp") ? preferences.getFloat("set_temp") : 25.0; 
     set_humidity = preferences.isKey("set_hum") ? preferences.getFloat("set_hum") : 60.0; 
     set_pressure = preferences.isKey("set_pres") ? preferences.getFloat("set_pres") : 1200.0;
+    systemStandby = preferences.isKey("standby") ? preferences.getBool("standby") : false;
 
     client.setServer(mqtt_server_host.c_str(), mqtt_server_port);
     client.setCallback(callback);
@@ -611,86 +656,91 @@ void loop() {
         // Update display if we are on the reading page
         if (currentPage == PAGE_SYS_READ) forceDisplayUpdate = true;
 
-        // --- 1. COMPRESSOR LOGIC (Board 1) ---
-        if (currentSensorTemp > set_temperature + 1.5) {
-            if (!isCompressorRunning && (now - lastCompressorOffTime >= RELAY_LOCKOUT_MS)) {
-                digitalWrite(RELAY_COMPRESSOR, HIGH);
-                isCompressorRunning = true;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Compressor ON  (Temp: %.2fC > Set: %.2fC)\n", currentSensorTemp, set_temperature);
-            } else if (!isCompressorRunning) {
-                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastCompressorOffTime)) / 1000;
-                Serial.printf("[RELAY] Compressor locked out. Ready in %lus\n", remaining);
-            }
-        } else if (currentSensorTemp <= set_temperature - 1.5) {
-            if (isCompressorRunning) {
-                digitalWrite(RELAY_COMPRESSOR, LOW);
-                isCompressorRunning = false;
-                lastCompressorOffTime = now;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Compressor OFF (Temp: %.2fC <= Set: %.2fC)\n", currentSensorTemp, set_temperature);
-            }
-        }
-
-        // --- 2. VACUUM PUMP LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
-        // ON when pressure is ABOVE setpoint, OFF when at or below
-        if (currentSensorPres > set_pressure) {
-            if (!isVacuumRunning && (now - lastVacuumOffTime >= RELAY_LOCKOUT_MS)) {
-                digitalWrite(RELAY_VACUUM, LOW);   // Active LOW: LOW = ON
-                isVacuumRunning = true;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Vacuum Pump ON  (Pres: %.2fhPa > Set: %.2fhPa)\n", currentSensorPres, set_pressure);
-            } else if (!isVacuumRunning) {
-                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastVacuumOffTime)) / 1000;
-                Serial.printf("[RELAY] Vacuum locked out. Ready in %lus\n", remaining);
-            }
+        // --- STANDBY MODE: Skip all relay control and telemetry ---
+        if (systemStandby) {
+            Serial.println(F("[SYSTEM] ⏸️ STANDBY — Controls and telemetry paused"));
+            if (currentPage == PAGE_SYS_READ) forceDisplayUpdate = true;
+            // Skip relay logic and telemetry publish entirely
         } else {
-            if (isVacuumRunning) {
-                digitalWrite(RELAY_VACUUM, HIGH);  // Active LOW: HIGH = OFF
-                isVacuumRunning = false;
-                lastVacuumOffTime = now;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Vacuum Pump OFF (Pres: %.2fhPa <= Set: %.2fhPa)\n", currentSensorPres, set_pressure);
+            // --- 1. COMPRESSOR LOGIC (Board 1) ---
+            if (currentSensorTemp > set_temperature + 1.5) {
+                if (!isCompressorRunning && (now - lastCompressorOffTime >= RELAY_LOCKOUT_MS)) {
+                    digitalWrite(RELAY_COMPRESSOR, HIGH);
+                    isCompressorRunning = true;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Compressor ON  (Temp: %.2fC > Set: %.2fC)\n", currentSensorTemp, set_temperature);
+                } else if (!isCompressorRunning) {
+                    unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastCompressorOffTime)) / 1000;
+                    Serial.printf("[RELAY] Compressor locked out. Ready in %lus\n", remaining);
+                }
+            } else if (currentSensorTemp <= set_temperature - 1.5) {
+                if (isCompressorRunning) {
+                    digitalWrite(RELAY_COMPRESSOR, LOW);
+                    isCompressorRunning = false;
+                    lastCompressorOffTime = now;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Compressor OFF (Temp: %.2fC <= Set: %.2fC)\n", currentSensorTemp, set_temperature);
+                }
             }
-        }
 
-        // --- 3. HUMIDIFIER LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
-        // ON when humidity is BELOW setpoint, OFF when at or above
-        if (currentSensorHum < set_humidity) {
-            if (!isHumidifierRunning && (now - lastHumidifierOffTime >= RELAY_LOCKOUT_MS)) {
-                digitalWrite(RELAY_HUMIDIFIER, LOW);   // Active LOW: LOW = ON
-                isHumidifierRunning = true;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Humidifier ON  (Hum: %.2f%% < Set: %.2f%%)\n", currentSensorHum, set_humidity);
-            } else if (!isHumidifierRunning) {
-                unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastHumidifierOffTime)) / 1000;
-                Serial.printf("[RELAY] Humidifier locked out. Ready in %lus\n", remaining);
+            // --- 2. VACUUM PUMP LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
+            if (currentSensorPres > set_pressure) {
+                if (!isVacuumRunning && (now - lastVacuumOffTime >= RELAY_LOCKOUT_MS)) {
+                    digitalWrite(RELAY_VACUUM, LOW);
+                    isVacuumRunning = true;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Vacuum Pump ON  (Pres: %.2fhPa > Set: %.2fhPa)\n", currentSensorPres, set_pressure);
+                } else if (!isVacuumRunning) {
+                    unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastVacuumOffTime)) / 1000;
+                    Serial.printf("[RELAY] Vacuum locked out. Ready in %lus\n", remaining);
+                }
+            } else {
+                if (isVacuumRunning) {
+                    digitalWrite(RELAY_VACUUM, HIGH);
+                    isVacuumRunning = false;
+                    lastVacuumOffTime = now;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Vacuum Pump OFF (Pres: %.2fhPa <= Set: %.2fhPa)\n", currentSensorPres, set_pressure);
+                }
             }
-        } else {
-            if (isHumidifierRunning) {
-                digitalWrite(RELAY_HUMIDIFIER, HIGH);  // Active LOW: HIGH = OFF
-                isHumidifierRunning = false;
-                lastHumidifierOffTime = now;
-                forceDisplayUpdate = true;
-                Serial.printf("[RELAY] Humidifier OFF (Hum: %.2f%% >= Set: %.2f%%)\n", currentSensorHum, set_humidity);
+
+            // --- 3. HUMIDIFIER LOGIC (Board 2 - Active LOW: LOW=ON, HIGH=OFF) ---
+            if (currentSensorHum < set_humidity) {
+                if (!isHumidifierRunning && (now - lastHumidifierOffTime >= RELAY_LOCKOUT_MS)) {
+                    digitalWrite(RELAY_HUMIDIFIER, LOW);
+                    isHumidifierRunning = true;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Humidifier ON  (Hum: %.2f%% < Set: %.2f%%)\n", currentSensorHum, set_humidity);
+                } else if (!isHumidifierRunning) {
+                    unsigned long remaining = (RELAY_LOCKOUT_MS - (now - lastHumidifierOffTime)) / 1000;
+                    Serial.printf("[RELAY] Humidifier locked out. Ready in %lus\n", remaining);
+                }
+            } else {
+                if (isHumidifierRunning) {
+                    digitalWrite(RELAY_HUMIDIFIER, HIGH);
+                    isHumidifierRunning = false;
+                    lastHumidifierOffTime = now;
+                    forceDisplayUpdate = true;
+                    Serial.printf("[RELAY] Humidifier OFF (Hum: %.2f%% >= Set: %.2f%%)\n", currentSensorHum, set_humidity);
+                }
             }
-        }
 
-        // --- PUBLISH TELEMETRY ---
-        if (wifiState && mqttState) { 
-            JsonDocument doc; 
-            doc["api_key"] = API_KEY;
-            doc["device_id"] = DEVICE_ID;
-            doc["temperature"] = currentSensorTemp;
-            doc["humidity"] = currentSensorHum;
-            doc["pressure"] = currentSensorPres; 
+            // --- PUBLISH TELEMETRY ---
+            if (wifiState && mqttState) { 
+                JsonDocument doc; 
+                doc["api_key"] = API_KEY;
+                doc["device_id"] = DEVICE_ID;
+                doc["temperature"] = currentSensorTemp;
+                doc["humidity"] = currentSensorHum;
+                doc["pressure"] = currentSensorPres; 
 
-            char buffer[256];
-            serializeJson(doc, buffer);
+                char buffer[256];
+                serializeJson(doc, buffer);
 
-            if (xSemaphoreTake(mqttMutex, (TickType_t)100)) {
-                client.publish(topic_sensors, buffer);
-                xSemaphoreGive(mqttMutex);
+                if (xSemaphoreTake(mqttMutex, (TickType_t)100)) {
+                    client.publish(topic_sensors, buffer);
+                    xSemaphoreGive(mqttMutex);
+                }
             }
         }
     }

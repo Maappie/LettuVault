@@ -149,9 +149,12 @@ class _StepLocalSetupState extends State<StepLocalSetup> {
               onPressed: () async {
                 if (!_formKey.currentState!.validate()) return;
                 final ip = _ipCtrl.text.trim();
+                final prefs = await SharedPreferences.getInstance();
                 if (ip.isNotEmpty) {
-                  final prefs = await SharedPreferences.getInstance();
                   await prefs.setString('offline_base_url', 'http://$ip:8000');
+                } else {
+                  // Clear stale override so auto-detection kicks in
+                  await prefs.remove('offline_base_url');
                 }
                 await widget.ctrl.connectToLocalPi(
                   ssid: _ssidCtrl.text.trim(),

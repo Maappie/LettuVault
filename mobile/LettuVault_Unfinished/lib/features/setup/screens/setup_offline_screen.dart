@@ -70,9 +70,12 @@ class _SetupOfflineScreenState extends State<SetupOfflineScreen> {
       password: _passCtrl.text,
     );
     final overrideIp = _ipCtrl.text.trim();
+    final prefs = await SharedPreferences.getInstance();
     if (overrideIp.isNotEmpty) {
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setString('offline_base_url', 'http://$overrideIp:8000');
+    } else {
+      // Clear the stored URL so auto-detection kicks in
+      await prefs.remove('offline_base_url');
     }
     setState(() => _saving = false);
     widget.onDone();

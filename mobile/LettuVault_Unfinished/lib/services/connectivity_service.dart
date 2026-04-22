@@ -79,18 +79,16 @@ class ConnectivityService {
 
   // ── Gateway detection ────────────────────────────────────────────────────
 
-  /// Detects and stores the backend gateway URL (phone IP x.x.x.Y → x.x.x.1).
-  /// Skips if a manual override is already stored in SharedPreferences.
+  /// Always re-detects the gateway to avoid stale URLs from previous networks.
+  /// Prioritizes the Pi's hotspot subnet (10.42.0.x), falls back to any private IP,
+  /// and keeps the stored URL if detection fails entirely.
   Future<void> _resolveGateway() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final existing = prefs.getString('offline_base_url') ?? '';
-      if (existing.isNotEmpty) {
-        debugPrint('[Connectivity] Using stored URL: $existing');
-        return;
-      }
 
-      String? gateway;
+      String? piSubnetGateway;
+      String? anyPrivateGateway;
+
       for (var iface in await NetworkInterface.list()) {
         for (var addr in iface.addresses) {
           if (addr.type == InternetAddressType.IPv4 &&
@@ -99,17 +97,23 @@ class ConnectivityService {
             final parts = addr.address.split('.');
             if (parts.length == 4) {
               parts[3] = '1';
-              gateway = parts.join('.');
-              break;
+              final candidate = parts.join('.');
+              // Prefer the Pi hotspot subnet (10.42.0.x)
+              if (addr.address.startsWith('10.42.0.')) {
+                piSubnetGateway = candidate;
+              }
+              anyPrivateGateway ??= candidate;
             }
           }
         }
-        if (gateway != null) break;
       }
 
+      final gateway = piSubnetGateway ?? anyPrivateGateway;
       if (gateway != null) {
         await prefs.setString('offline_base_url', 'http://$gateway:8000');
-        debugPrint('[Connectivity] Auto-detected gateway: http://$gateway:8000');
+        debugPrint('[Connectivity] Gateway detected: http://$gateway:8000');
+      } else {
+        debugPrint('[Connectivity] No gateway detected — keeping stored URL');
       }
     } catch (e) {
       debugPrint('[Connectivity] Gateway detection error: $e');

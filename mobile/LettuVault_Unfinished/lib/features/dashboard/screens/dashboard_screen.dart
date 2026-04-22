@@ -7,6 +7,7 @@ import 'package:my_new_app/features/dashboard/widgets/sensor_summary_card.dart';
 import 'package:my_new_app/features/dashboard/widgets/produce_scan_button.dart';
 import 'package:my_new_app/features/dashboard/widgets/recent_scans_widget.dart';
 import 'package:my_new_app/features/dashboard/widgets/recent_condition_scans_widget.dart';
+import 'package:my_new_app/features/dashboard/widgets/system_off_button.dart';
 import 'package:my_new_app/src/repositories/ai_repository.dart';
 
 /// DashboardScreen — main landing screen.
@@ -85,6 +86,8 @@ class DashboardScreen extends StatelessWidget {
               const RecentProduceScansWidget(),
               SectionHeader('CONDITION SCANS (WORMS & WILTING)'),
               const RecentConditionScansWidget(),
+              SectionHeader('SYSTEM POWER'),
+              const SystemOffButton(),
               const SizedBox(height: 20),
             ],
           ),

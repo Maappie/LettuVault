@@ -96,6 +96,28 @@ def test_camera():
     mqtt_service.send_command("FORCE_TEST_CAPTURE")
     return {"message": "Test capture triggered"}
 
+@router.post("/system-off", dependencies=[Depends(get_current_active_device)])
+def system_off(db: Session = Depends(get_db)):
+    """Puts the ESP32 into standby mode — all relays OFF, telemetry paused."""
+    from lettu_backend.services.mqtt import mqtt_service
+    import json
+
+    payload = {"system_off": True}
+
+    if settings.REQUIRE_ESP32_ACK:
+        success = mqtt_service.send_config_with_ack(payload, max_retries=1, timeout=2.0)
+        esp32_status = "ESP32 in standby" if success else "ESP32 unreachable"
+    else:
+        # Bypass ACK — just publish directly
+        mqtt_service.client.publish("lettuvault/control", json.dumps(payload))
+        esp32_status = "Standby sent (ACK bypassed)"
+
+    # Save a null-config row so the dashboard shows no targets
+    repo = DataRepository(db)
+    repo.create_system_config({})
+
+    return {"message": "System entering standby", "esp32_status": esp32_status}
+
 # --- ⚙️ SYSTEM CONFIGURATION ENDPOINTS (Desired Environment Settings) ---
 @router.get("/system_config", response_model=list[SystemConfigResponse], dependencies=[Depends(get_current_active_device)])
 def get_system_configs(db: Session = Depends(get_db)):
