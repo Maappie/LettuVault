@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:my_new_app/src/core/api_client.dart';
 
-/// SystemOffButton — sends a system-off command to put the ESP32 into standby.
+/// SystemOffButton — puts the ESP32 into standby mode.
 ///
-/// All relays are turned OFF and sensor telemetry pauses.
-/// Shown at the bottom of the dashboard screen.
+/// Works in BOTH offline and online mode via the same single call:
+///   - Offline: Pi's /system-off → publishes MQTT immediately → ESP32 standby
+///   - Online:  Cloud's /system-off → enqueues SYSTEM_OFF command →
+///              Pi sync engine picks it up on next poll → publishes MQTT → ESP32 standby
 class SystemOffButton extends StatefulWidget {
   const SystemOffButton({super.key});
 
@@ -18,7 +20,6 @@ class _SystemOffButtonState extends State<SystemOffButton> {
   bool _loading = false;
 
   Future<void> _turnOffSystem() async {
-    // Confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -58,7 +59,7 @@ class _SystemOffButtonState extends State<SystemOffButton> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('System entering standby — all controls OFF'),
+            content: const Text('System standby command sent'),
             backgroundColor: Colors.orange.shade700,
           ),
         );

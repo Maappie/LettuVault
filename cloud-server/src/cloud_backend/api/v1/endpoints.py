@@ -271,6 +271,32 @@ def save_system_config(
     return {"message": "Config queued for broadcast", "command_id": cmd.id}
 
 
+@router.post(
+    "/system-off",
+    summary="[Mobile] Queue a system standby command for a Vault.",
+)
+def system_off(
+    vault_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user_email: str | None = Depends(require_mobile_key)
+):
+    """
+    Enqueues a SYSTEM_OFF command for the target Vault.
+    The Pi's sync engine picks it up on the next poll cycle and publishes
+    the standby signal to the ESP32 via local MQTT.
+    """
+    repo = CloudRepository(db)
+    target_vault = vault_id
+    if not target_vault and user_email:
+        target_vault = repo.get_vault_id_by_email(user_email)
+
+    if not target_vault:
+        raise HTTPException(status_code=400, detail="No vault_id provided and could not determine vault from user profile.")
+
+    cmd = repo.enqueue_command(target_vault, "SYSTEM_OFF")
+    return {"message": "System standby command queued", "command_id": cmd.id}
+
+
 # ── Auth Endpoints (Mobile App → Cloud) ───────────────────────────────────────────────
 
 @router.post(

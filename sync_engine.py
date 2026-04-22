@@ -354,6 +354,10 @@ def poll_and_execute_commands():
                 elif c_type == "TRIGGER_PRODUCE_SCAN":
                     r = requests.post(f"{local_api_base}/trigger-produce-scan", headers=headers, timeout=5)
                     r.raise_for_status()
+                elif c_type == "SYSTEM_OFF":
+                    r = requests.post(f"{local_api_base}/system-off", headers=headers, timeout=5)
+                    r.raise_for_status()
+                    logger.info(f"⏹️  SYSTEM_OFF executed — ESP32 entering standby.")
                 elif c_type == "SYS_CONFIG":
                     if c_payload:
                         r = requests.post(
