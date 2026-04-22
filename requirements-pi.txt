@@ -87,7 +87,7 @@ dacite==1.8.1
 # --- PYDANTIC / FASTAPI INTERNALS ---
 annotated-types==0.7.0
 typing-inspection>=0.4.2
-typing_extensions==4.12.2
+typing_extensions>=4.14.1
 
 # --- CLI UTILS ---
 shellingham==1.5.4
