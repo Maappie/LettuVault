@@ -11,7 +11,15 @@ PYTHON="$REPO_PATH/.venv/bin/python"
 
 if [ ! -f "$PYTHON" ]; then
     echo "❌ ERROR: Virtual environment not found at $REPO_PATH/.venv"
-    echo "Please run: python3 -m venv .venv && source .venv/bin/activate && pip install -e ."
+    echo "Please run: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements-pi.txt"
+    exit 1
+fi
+
+# Verify the venv is using Python 3.10
+PY_VERSION=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if [ "$PY_VERSION" != "3.10" ]; then
+    echo "❌ ERROR: Virtual environment is using Python $PY_VERSION — expected 3.10"
+    echo "Please recreate: rm -rf .venv && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements-pi.txt"
     exit 1
 fi
 
