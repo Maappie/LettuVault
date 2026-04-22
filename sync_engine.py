@@ -276,7 +276,7 @@ def run_sync(state: dict) -> tuple[dict, int]:
             sync_endpoint_url,
             json=payload,
             headers={"X-SYNC-API-KEY": CLOUD_SYNC_API_KEY},
-            timeout=10,  # Reduced from 30s — unblocks the loop faster on slow responses
+            timeout=30,  # Render free tier can take up to 30s to wake from cold start
         )
         response.raise_for_status()
         result = response.json()
@@ -344,20 +344,40 @@ def poll_and_execute_commands():
             logger.info(f"⚡  Executing remote command: {c_type} (ID: {c_id})")
             
             try:
-                # Dispatch locally
+                # Dispatch locally — check response status before ACKing
                 headers = {"X-API-KEY": os.getenv("X_API_KEY", "")}
+                dispatch_ok = True
                 
                 if c_type == "FORCE_TEST_CAPTURE":
-                    requests.post(f"{local_api_base}/test-camera", headers=headers, timeout=5)
+                    r = requests.post(f"{local_api_base}/test-camera", headers=headers, timeout=5)
+                    r.raise_for_status()
                 elif c_type == "TRIGGER_PRODUCE_SCAN":
-                    requests.post(f"{local_api_base}/trigger-produce-scan", headers=headers, timeout=5)
+                    r = requests.post(f"{local_api_base}/trigger-produce-scan", headers=headers, timeout=5)
+                    r.raise_for_status()
                 elif c_type == "SYS_CONFIG":
                     if c_payload:
-                        requests.post(f"{local_api_base}/system_config", json=json.loads(c_payload), headers=headers, timeout=10)
+                        r = requests.post(
+                            f"{local_api_base}/system_config",
+                            json=json.loads(c_payload),
+                            headers=headers,
+                            timeout=15,  # Longer — ESP32 ACK can take a few seconds
+                        )
+                        if r.status_code == 503:
+                            # ESP32 didn't ACK — do NOT mark as DELIVERED, retry next cycle
+                            logger.warning(f"⚠️  SYS_CONFIG {c_id} rejected by local backend (503 — ESP32 not ready). Will retry.")
+                            dispatch_ok = False
+                        else:
+                            r.raise_for_status()
+                    else:
+                        logger.warning(f"⚠️  SYS_CONFIG command {c_id} has no payload — skipping.")
+                        dispatch_ok = False
                 else:
                     logger.warning(f"⚠️  Unknown command type from cloud: {c_type}")
                 
-                # Acknowledge completion back to cloud
+                if not dispatch_ok:
+                    continue  # Leave command PENDING — will be retried next cycle
+                
+                # Acknowledge completion back to cloud only if local dispatch succeeded
                 ack_res = requests.post(
                     ack_url,
                     json={"command_id": c_id},
@@ -365,11 +385,11 @@ def poll_and_execute_commands():
                     timeout=5
                 )
                 ack_res.raise_for_status()
-                logger.info(f"✅  Command {c_id} acknowledged.")
+                logger.info(f"✅  Command {c_id} ({c_type}) acknowledged.")
                 executed_any = True
                 
             except requests.exceptions.RequestException as e:
-                logger.error(f"❌  Failed to execute/ACK local command {c_type}: {e}")
+                logger.error(f"❌  Failed to execute/ACK local command {c_type} (ID: {c_id}): {e}")
                 
         return executed_any
         
@@ -391,7 +411,7 @@ def _keep_render_alive():
     This background thread keeps it warm.
     """
     ping_url = f"{CLOUD_SYNC_URL.rstrip('/')}/cloud-server-health"
-    ping_interval = 10 * 60  # 10 minutes
+    ping_interval = 4 * 60  # 4 minutes — keeps Render warm (spins down after 15min idle)
     while True:
         try:
             time.sleep(ping_interval)

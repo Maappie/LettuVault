@@ -22,7 +22,7 @@ const String kDefaultPiSsid = 'LettuVault-01';
 
 // ── Polling Intervals ────────────────────────────────────────────────────────
 // How often the dashboard polls for new readings (seconds).
-const int kDashboardPollIntervalSeconds = 10;
+const int kDashboardPollIntervalSeconds = 5;
 
 // ── Dynamic UI Tolerances ────────────────────────────────────────────────────
 // How far a sensor reading can drift from the target before the card turns red.

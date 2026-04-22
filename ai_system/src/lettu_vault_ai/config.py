@@ -11,8 +11,11 @@
 #   1 = First external USB camera
 #   2 = Second external USB camera
 #   "rtsp://..." = IP/Network camera stream URL
-CAMERA_INDEX = 2
+CAMERA_INDEX = 1
 
+# If True, the system will try other indices if CAMERA_INDEX fails.
+# Set to False to FORCE the system to use only the configured index.
+ALLOW_CAMERA_FALLBACK = True
 # Resolution hint (camera may not support all values)
 # Common options: (640, 480), (1280, 720), (1920, 1080)
 CAMERA_WIDTH  = 640
@@ -26,14 +29,14 @@ CAMERA_HEIGHT = 480
 #   0.2 = Lenient: detects even uncertain objects (good for dim lighting)
 #   0.5 = Balanced: recommended for controlled environments
 #   0.7 = Strict: only reports high-confidence detections
-CONFIDENCE_THRESHOLD = 0.6
+CONFIDENCE_THRESHOLD = 0.5
 
 # Path to the custom YOLO model weights.
 # Leave as None to use auto-detection (looks for best.pt in runs/).
 MODEL_PATH = None  # Example: "ai_system/runs/my_model/weights/best.pt"
 
 # Which classes to track. Must match the model's trained class names.
-TRACKED_CLASSES = ["lettuce", "wilting", "worms", "strawberry"]
+TRACKED_CLASSES = ["lettuce", "strawberry", "wilting", "worms"]
 
 # ----------------------------
 # ⏳ STABILITY & TRIGGER SETTINGS
@@ -67,6 +70,7 @@ MQTT_PORT_OVERRIDE   = None  # e.g., 1883 or None (use .env)
 # ----------------------------
 
 # Show the annotated camera window with bounding boxes
+# ⚠️  MUST be False on Raspberry Pi — uses opencv-python-headless (no GUI/X11)
 SHOW_CAMERA_WINDOW = False
 
 # Window title

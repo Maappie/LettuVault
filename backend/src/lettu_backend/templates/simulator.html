@@ -471,8 +471,9 @@
             resBox.style.color = "#4ade80";
 
             if (statusId === "config-status") {
-              const ok = isJson && result.esp32_status === "ESP32 received";
-              status.innerText = ok ? "✅ ESP32 received" : "❌ ESP32 did not acknowledge";
+              const statusValue = result.esp32_status || "";
+              const ok = isJson && (statusValue === "ESP32 received" || statusValue.toLowerCase().includes("bypassed"));
+              status.innerText = ok ? `✅ ${statusValue}` : "❌ ESP32 did not acknowledge";
               status.style.color = ok ? "#4ade80" : "#ef4444";
             } else if (statusId === "publish-status") {
               status.innerText = "✅ Record saved!";

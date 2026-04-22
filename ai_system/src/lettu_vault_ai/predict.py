@@ -105,29 +105,39 @@ CAMERA_RETRY_INTERVAL = 10    # Seconds between retries
 
 def _open_camera():
     """Attempts to find and open a working camera source with auto-discovery."""
-    # Determine which indices to try. Always try the configured preference first.
+    # Determine which indices to try. 
     indices_to_try = [ai_cfg.CAMERA_INDEX]
-    # Add common fallback indices 0 through 4 to ensure dynamic detection
-    if isinstance(ai_cfg.CAMERA_INDEX, int):
-        indices_to_try += [i for i in range(5) if i != ai_cfg.CAMERA_INDEX]
+    
+    # Only add fallbacks if explicitly allowed in config.py
+    if getattr(ai_cfg, "ALLOW_CAMERA_FALLBACK", True):
+        if isinstance(ai_cfg.CAMERA_INDEX, int):
+            indices_to_try += [i for i in range(5) if i != ai_cfg.CAMERA_INDEX]
+        else:
+            indices_to_try += [0, 1, 2, 3, 4]
     else:
-        indices_to_try += [0, 1, 2, 3, 4]
+        print(f"⚠️ [AI] Strict Mode: Only attempting configured camera index {ai_cfg.CAMERA_INDEX}")
+
+    # Backend selection: DSHOW is significantly more stable on Windows for webcams
+    backend = cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY
 
     for attempt in range(1, CAMERA_MAX_RETRIES + 1):
         for idx in indices_to_try:
-            print(f"🔍 [AI] Probing camera source: {idx}...")
-            cap = cv2.VideoCapture(idx)
+            print(f"🔍 [AI] Probing camera source: {idx} (Backend: {'DSHOW' if backend == cv2.CAP_DSHOW else 'DEFAULT'})...")
+            cap = cv2.VideoCapture(idx, backend)
             
             # Check if camera opened AND can actually read a frame
-            # (Linux sometimes creates blank /dev/video endpoints for metadata)
             if cap.isOpened():
                 success, _ = cap.read()
                 if success:
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  ai_cfg.CAMERA_WIDTH)
                     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ai_cfg.CAMERA_HEIGHT)
-                    # Limit buffer size to get fresh frames instead of stale ones when FPS is limited
+                    # Limit buffer size to get fresh frames
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    print(f"✅ [AI] Successfully locked onto active camera at source '{idx}'!")
+                    
+                    # Log the success clearly
+                    print(f"✅ [AI] LOCKED onto camera at index {idx}!")
+                    if idx != ai_cfg.CAMERA_INDEX:
+                        print(f"💡 [AI] Note: Configured index {ai_cfg.CAMERA_INDEX} failed or was skipped. Found working camera at {idx}.")
                     return cap
             
             cap.release()
@@ -203,7 +213,18 @@ def run_live_camera():
             continue
         consecutive_failures = 0
 
-        results = list(model.predict(source=frame, conf=ai_cfg.CONFIDENCE_THRESHOLD, show=False, stream=True, verbose=False))
+        # Filter detections to only the classes we actually want to track
+        # This prevents unwanted classes (like strawberry) from being detected or shown
+        target_indices = [i for i, name in model.names.items() if name in (produce_classes + continuous_classes)]
+        
+        results = list(model.predict(
+            source=frame, 
+            conf=ai_cfg.CONFIDENCE_THRESHOLD, 
+            classes=target_indices,
+            show=False, 
+            stream=True, 
+            verbose=False
+        ))
         annotated_frame = frame.copy()
         
         # 1. 🔍 PROCESS MONITORS
@@ -234,6 +255,8 @@ def run_live_camera():
         if ai_cfg.SHOW_CAMERA_WINDOW:
             cv2.putText(annotated_frame, f"FPS: {actual_fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.imshow(ai_cfg.CAMERA_WINDOW_TITLE, annotated_frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
         current_time = time.time()
 
@@ -293,8 +316,6 @@ def run_live_camera():
             TEST_CAPTURE_REQUESTED = False
             send_results_to_backend({"Camera Test": 1}, 1.0, annotated_frame, scan_type="produce")
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
 
         # --- Enforce FPS Target & Calculate Actual FPS ---
         if hasattr(ai_cfg, 'TARGET_FPS') and ai_cfg.TARGET_FPS > 0:

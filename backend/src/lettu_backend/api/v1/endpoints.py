@@ -32,7 +32,10 @@ def get_condition_scans(request: Request, db: Session = Depends(get_db)):
     base_url = str(request.base_url).rstrip("/")
     for s in scans:
         if s.image and not s.image.startswith("http"):
-            s.image = f"{base_url}/{s.image}"
+            # Ensure path is captures/filename
+            img = s.image.lstrip("/")
+            if not img.startswith("captures/"): img = f"captures/{img}"
+            s.image = f"{base_url}/{img}"
     return scans
 
 @router.get("/ai-scans/produce", response_model=list[AIProduceResponse], dependencies=[Depends(get_current_active_device)])
@@ -42,7 +45,10 @@ def get_produce_scans(request: Request, db: Session = Depends(get_db)):
     base_url = str(request.base_url).rstrip("/")
     for s in scans:
         if s.image and not s.image.startswith("http"):
-            s.image = f"{base_url}/{s.image}"
+            # Ensure path is captures/filename
+            img = s.image.lstrip("/")
+            if not img.startswith("captures/"): img = f"captures/{img}"
+            s.image = f"{base_url}/{img}"
     return scans
 
 @router.post("/ai-scans", dependencies=[Depends(get_current_active_device)])

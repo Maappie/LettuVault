@@ -32,8 +32,8 @@ class AIActivityHandler:
                 filepath = os.path.join(CAPTURES_DIR, filename)
                 with open(filepath, "wb") as f:
                     f.write(base64.b64decode(image_b64))
-                image_rel_path = f"captures/{filename}"
-                logger.info(f"📸 [SUBSCRIBER] Snapshot saved locally: {image_rel_path}")
+                image_rel_path = filename
+                logger.info(f"📸 [SUBSCRIBER] Snapshot saved locally: {os.path.join(CAPTURES_DIR, filename)}")
             except Exception as img_err:
                 logger.warning(f"⚠️ [SUBSCRIBER] Could not save snapshot: {img_err}")
 

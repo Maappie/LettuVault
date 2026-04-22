@@ -655,7 +655,7 @@
           btn.textContent = "\u{1F441}\uFE0F View";
           btn.addEventListener("click", () => {
             openLightbox(
-              "/" + s.image,
+              s.image,
               s.label || s.produce_type,
               new Date(s.timestamp).toLocaleString(),
               Math.round(s.confidence_score * 100) + "%",

@@ -94,7 +94,7 @@ class LogHub:
             "desc": "Central MQTT Hub"
         },
         "API SERVER": {
-            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", os.getenv("API_HOST", "0.0.0.0"), "--port", str(os.getenv("API_PORT", "8000")), "--reload"],
+            "cmd": [python_exe, "-m", "uvicorn", "lettu_backend.main:app", "--host", os.getenv("API_HOST", "0.0.0.0"), "--port", str(os.getenv("API_PORT", "8000")), "--reload", "--reload-dir", "backend/src"],
             "color": "green",
             "desc": "Main Backend & Web"
         },
@@ -373,6 +373,8 @@ def launch_hub(include_mobile=False):
     try:
         hub = LogHub(include_mobile=include_mobile)
         hub.run()
+    except KeyboardInterrupt:
+        pass # Handle graceful shutdown without stack trace
     except Exception as e:
         console.print(f"FAILED TO START SYSTEM: {e}")
 

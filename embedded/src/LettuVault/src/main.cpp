@@ -17,9 +17,9 @@
  * ---------------------------------------------------------------------------------------
  */
 // --- DEFAULT FALLBACKS (Used if NVS is empty) ---
-#define DEFAULT_WIFI_SSID       "LettuVault-01"
+#define DEFAULT_WIFI_SSID       "Mappie"
 #define DEFAULT_WIFI_PASSWORD   "Aa1231325213!"
-#define DEFAULT_MQTT_SERVER     "10.42.0.1"
+#define DEFAULT_MQTT_SERVER     "192.168.137.1"  // Laptop hotspot IP
 #define DEFAULT_MQTT_PORT       1883
 #define DEVICE_ID               "ESP32-LettuVault-01"
 #define API_KEY                 "lettuce-master-key-2024" 
@@ -354,10 +354,11 @@ void setup() {
     preferences.begin("lettuvault", false);
     
     // --- FORCE UPDATE NVS CREDENTIALS ---
-    // Uncomment these 3 lines if you want to force the ESP32 to ignore old saved passwords
-    // preferences.putString("wifi_ssid", DEFAULT_WIFI_SSID);
-    // preferences.putString("wifi_pass", DEFAULT_WIFI_PASSWORD);
-    // preferences.putString("mqtt_serv", DEFAULT_MQTT_SERVER);
+    // Force the ESP32 to wipe old saved MQTT server (Pi IP) and use the new default (Laptop IP).
+    // After reflashing and confirming it works, re-comment these lines to restore NVS persistence.
+    preferences.putString("wifi_ssid", DEFAULT_WIFI_SSID);
+    preferences.putString("wifi_pass", DEFAULT_WIFI_PASSWORD);
+    preferences.putString("mqtt_serv", DEFAULT_MQTT_SERVER);
     
     // Load Network Settings (checking isKey first to avoid ESP32 core NOT_FOUND error logs)
     wifi_ssid = preferences.isKey("wifi_ssid") ? preferences.getString("wifi_ssid") : String(DEFAULT_WIFI_SSID);
