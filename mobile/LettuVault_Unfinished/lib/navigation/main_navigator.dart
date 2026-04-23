@@ -79,7 +79,7 @@ class MainNavigatorState extends State<MainNavigator> {
     await _settings.loadTheme();
     await SecureStorage.seedDefaultsIfNeeded();
 
-    _polling.start();
+    await _polling.start();
 
     // Subscribe to background isolate readings (offline mode)
     try {
@@ -121,7 +121,7 @@ class MainNavigatorState extends State<MainNavigator> {
     final current = appModeNotifier.value;
     if (current == AppMode.offline) {
       ConnectivityService.instance.switchToOnline();
-      _polling.start();
+      await _polling.start();
     } else {
       await _switchOffline();
     }
@@ -144,7 +144,7 @@ class MainNavigatorState extends State<MainNavigator> {
         duration: const Duration(seconds: 5),
       ));
     } else if (!_cancelConnection) {
-      _polling.start();
+      await _polling.start();
       setState(() => _isSwitchingMode = false);
     } else {
       setState(() => _isSwitchingMode = false);
@@ -202,18 +202,18 @@ class MainNavigatorState extends State<MainNavigator> {
   Widget build(BuildContext context) {
     // First-time onboarding overlay
     if (_showOnboarding) {
-      return OnboardingFlowScreen(onComplete: () {
+      return OnboardingFlowScreen(onComplete: () async {
         setState(() => _showOnboarding = false);
-        _polling.start();
+        await _polling.start();
         _promptAutoStart();
       });
     }
 
     // Re-configure offline credentials (from Settings drawer)
     if (_showOfflineSetup) {
-      return SetupOfflineScreen(onDone: () {
+      return SetupOfflineScreen(onDone: () async {
         setState(() => _showOfflineSetup = false);
-        _polling.start();
+        await _polling.start();
         _promptAutoStart();
       });
     }

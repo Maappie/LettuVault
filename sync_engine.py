@@ -179,24 +179,17 @@ def _encode_image_b64(image_path: str) -> str:
         return image_path
     
     root = Path(__file__).parent
+    
+    # ai_handler now cleanly saves images to data/captures/ and stores just the filename
+    full_path = root / "data" / "captures" / image_path
 
-    # ai_handler saves images to data/captures/<filename>
-    # The DB stores just the filename (e.g. "scan_xxx.jpg")
-    candidates = [
-        root / "data" / "captures" / image_path,   # primary: data/captures/scan_xxx.jpg
-        root / "data" / image_path,                 # fallback: data/scan_xxx.jpg
-        root / image_path,                          # last resort: scan_xxx.jpg
-    ]
-
-    for full_path in candidates:
-        if full_path.exists():
-            try:
-                with open(full_path, "rb") as f:
-                    encoded = base64.b64encode(f.read()).decode("utf-8")
-                    return f"b64:{encoded}"
-            except Exception as e:
-                logger.warning(f"⚠️ Could not encode image {full_path}: {e}")
-                break
+    if full_path.exists():
+        try:
+            with open(full_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+                return f"b64:{encoded}"
+        except Exception as e:
+            logger.warning(f"⚠️ Could not encode image {full_path}: {e}")
 
     logger.warning(f"⚠️ Image file not found for: {image_path}")
     # Return original string if processing failed or file vanished

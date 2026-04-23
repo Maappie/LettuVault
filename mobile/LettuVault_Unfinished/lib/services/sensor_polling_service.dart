@@ -8,6 +8,7 @@ import 'package:my_new_app/src/repositories/environment_repository.dart';
 import 'package:my_new_app/src/repositories/config_repository.dart';
 import 'package:my_new_app/services/notification_service.dart';
 import 'package:my_new_app/services/csv_logger_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Sensor state snapshot — published to listeners after each poll.
 class SensorState {
@@ -124,19 +125,75 @@ class SensorPollingService extends ChangeNotifier {
   bool _useDefaultThresholds = true;
   bool _alertsEnabled = true;
 
+  /// When non-null, _fetchOnce() will NOT change the standby flag until
+  /// this time has passed. Prevents stale cloud data from overriding
+  /// the user's explicit Turn Off / Turn On action.
+  DateTime? _standbyLockedUntil;
+
   set alertsEnabled(bool v) { _alertsEnabled = v; }
   set useDefaultThresholds(bool v) { _useDefaultThresholds = v; }
 
   // ── Start / Stop ─────────────────────────────────────────────────────────
 
-  void start() {
+  Future<void> start() async {
     _enabled = true;
+    await _loadPersistedStandby(); // await so UI is correct before first poll
     _fetchOnce();
     _timer?.cancel();
     _timer = Timer.periodic(
       Duration(seconds: kDashboardPollIntervalSeconds),
       (_) => _fetchOnce(),
     );
+  }
+
+  /// Restores the persisted systemStandby flag so the button shows the correct
+  /// state immediately on app open, before the first API poll completes.
+  Future<void> _loadPersistedStandby() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getBool('system_standby') ?? false;
+
+    // Restore the lock timestamp (prevents stale API from overriding on relaunch)
+    final lockMs = prefs.getInt('standby_lock_until');
+    if (lockMs != null) {
+      final lockTime = DateTime.fromMillisecondsSinceEpoch(lockMs);
+      if (DateTime.now().isBefore(lockTime)) {
+        _standbyLockedUntil = lockTime;
+        debugPrint('[Polling] Lock restored until $lockTime');
+      }
+    }
+
+    if (saved != _state.systemStandby) {
+      _state = _state.copyWith(systemStandby: saved);
+      notifyListeners();
+    }
+    debugPrint('[Polling] Persisted standby loaded: $saved');
+  }
+
+  /// Persists the standby flag to SharedPreferences (properly awaited).
+  Future<void> _saveStandbyState(bool standby) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('system_standby', standby);
+      debugPrint('[Polling] Standby state saved: $standby');
+    } catch (e) {
+      debugPrint('[Polling] Failed to save standby state: $e');
+    }
+  }
+
+  /// Called immediately when the user taps Turn Off / Turn On so the state
+  /// is persisted before the next poll cycle confirms it from the API.
+  /// Locks the standby flag for 2 minutes so _fetchOnce() won't override
+  /// it with stale cloud data.
+  Future<void> setStandby(bool standby) async {
+    _standbyLockedUntil = DateTime.now().add(const Duration(seconds: 120));
+    _state = _state.copyWith(systemStandby: standby);
+    notifyListeners();
+    await _saveStandbyState(standby);
+    // Also persist the lock timestamp so it survives app restarts
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('standby_lock_until',
+        _standbyLockedUntil!.millisecondsSinceEpoch);
+    debugPrint('[Polling] Standby locked until $_standbyLockedUntil');
   }
 
   void stop() {
@@ -159,13 +216,37 @@ class SensorPollingService extends ChangeNotifier {
       final config  = await _configRepo.getLatest();
 
       if (config != null) {
-        // Detect standby: latest config row has all-null values (system turned off)
-        final isStandby = config.temperature == null &&
-            config.humidity == null &&
-            config.pressure == null;
+        // Detect standby: latest config row has all-null or all-zero values
+        // (all-zero covers old DB rows before columns were made nullable)
+        bool _isOff(double? v) => v == null || v == 0.0;
+        final isStandby = _isOff(config.temperature) &&
+            _isOff(config.humidity) &&
+            _isOff(config.pressure);
 
-        if (isStandby) {
+        // If the user recently toggled standby, don't let the API override it.
+        // This prevents stale cloud data from flipping the button back.
+        final isLocked = _standbyLockedUntil != null &&
+            DateTime.now().isBefore(_standbyLockedUntil!);
+        if (isLocked) {
+          debugPrint('[Polling] Standby locked — ignoring API standby=$isStandby');
+          // Still update targets if system is running and API has valid data
+          if (!_state.systemStandby && !isStandby) {
+            final tT = config.temperature ?? _state.targetTemp;
+            final tH = config.humidity    ?? _state.targetHum;
+            final tP = config.pressure    ?? _state.targetPres;
+            _state = _state.copyWith(
+              targetTemp: tT, targetHum: tH, targetPres: tP,
+              tempThresholdLow:  _useDefaultThresholds ? tT - kTempMaxDeviation  : null,
+              tempThresholdHigh: _useDefaultThresholds ? tT + kTempMaxDeviation  : null,
+              humThresholdLow:   _useDefaultThresholds ? tH - kHumMaxDeviation   : null,
+              humThresholdHigh:  _useDefaultThresholds ? tH + kHumMaxDeviation   : null,
+              presThresholdLow:  _useDefaultThresholds ? tP - kPresMaxDeviation  : null,
+              presThresholdHigh: _useDefaultThresholds ? tP + kPresMaxDeviation  : null,
+            );
+          }
+        } else if (isStandby) {
           _state = _state.copyWith(systemStandby: true);
+          await _saveStandbyState(true);
         } else {
           final tT = config.temperature ?? _state.targetTemp;
           final tH = config.humidity    ?? _state.targetHum;
@@ -180,6 +261,7 @@ class SensorPollingService extends ChangeNotifier {
             presThresholdLow:  _useDefaultThresholds ? tP - kPresMaxDeviation  : null,
             presThresholdHigh: _useDefaultThresholds ? tP + kPresMaxDeviation  : null,
           );
+          await _saveStandbyState(false);
         }
       }
 

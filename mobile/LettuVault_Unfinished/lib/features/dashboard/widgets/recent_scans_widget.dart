@@ -37,15 +37,6 @@ class _RecentProduceScansWidgetState extends State<RecentProduceScansWidget> {
       return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
     }
 
-    if (_scans.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('No produce scans yet.', style: TextStyle(color: Colors.grey)),
-        ),
-      );
-    }
-
     return Column(
       children: [
         Row(
@@ -58,8 +49,16 @@ class _RecentProduceScansWidgetState extends State<RecentProduceScansWidget> {
             )
           ],
         ),
-        SizedBox(
-          height: 180,
+        if (_scans.isEmpty)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No produce scans yet.', style: TextStyle(color: Colors.grey)),
+            ),
+          )
+        else
+          SizedBox(
+            height: 180,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _scans.length,
@@ -75,12 +74,37 @@ class _RecentProduceScansWidgetState extends State<RecentProduceScansWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        child: scan.image != null && scan.image!.startsWith('http')
-                            ? Image.network(scan.image!, fit: BoxFit.cover)
-                            : Container(
-                                color: Colors.grey.withValues(alpha: 0.2),
-                                child: const Center(child: Icon(Icons.image_not_supported)),
-                              ),
+                        child: () {
+                          if (scan.image == null || scan.image!.isEmpty) {
+                            return Container(
+                              color: Colors.grey.withValues(alpha: 0.2),
+                              child: const Center(child: Icon(Icons.image_not_supported)),
+                            );
+                          }
+                          final imageUrl = scan.image!.startsWith('http') 
+                              ? scan.image! 
+                              : 'http://10.42.0.1:8000/captures/${scan.image}';
+                          return Image.network(
+                            imageUrl, 
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey.withValues(alpha: 0.1),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 24, height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              color: Colors.grey.withValues(alpha: 0.2),
+                              child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                            ),
+                          );
+                        }(),
                       ),
                       Container(
                         color: Theme.of(context).cardColor,

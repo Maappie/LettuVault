@@ -89,7 +89,7 @@ class DashboardScreen extends StatelessWidget {
               SectionHeader('CONDITION SCANS (WORMS & WILTING)'),
               const RecentConditionScansWidget(),
               SectionHeader('SYSTEM POWER'),
-              const SystemOffButton(),
+              SystemToggleButton(isStandby: systemStandby),
               const SizedBox(height: 20),
             ],
           ),

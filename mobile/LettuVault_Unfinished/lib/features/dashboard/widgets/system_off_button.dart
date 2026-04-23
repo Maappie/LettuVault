@@ -1,25 +1,35 @@
 import 'package:flutter/material.dart';
 
 import 'package:my_new_app/src/core/api_client.dart';
+import 'package:my_new_app/services/sensor_polling_service.dart';
 
-/// SystemOffButton — puts the ESP32 into standby mode.
+/// SystemToggleButton — turns the system OFF or ON depending on current state.
 ///
-/// Works in BOTH offline and online mode via the same single call:
-///   - Offline: Pi's /system-off → publishes MQTT immediately → ESP32 standby
-///   - Online:  Cloud's /system-off → enqueues SYSTEM_OFF command →
-///              Pi sync engine picks it up on next poll → publishes MQTT → ESP32 standby
-class SystemOffButton extends StatefulWidget {
-  const SystemOffButton({super.key});
+/// OFF  → calls POST /system-off  (works offline + online via command relay)
+/// ON   → calls POST /trigger-produce-scan (same relay, both modes)
+class SystemToggleButton extends StatefulWidget {
+  /// Whether the system is currently in standby mode.
+  final bool isStandby;
+
+  const SystemToggleButton({super.key, required this.isStandby});
 
   @override
-  State<SystemOffButton> createState() => _SystemOffButtonState();
+  State<SystemToggleButton> createState() => _SystemToggleButtonState();
 }
 
-class _SystemOffButtonState extends State<SystemOffButton> {
+class _SystemToggleButtonState extends State<SystemToggleButton> {
   final ApiClient _client = ApiClient();
   bool _loading = false;
 
-  Future<void> _turnOffSystem() async {
+  Future<void> _handleTap() async {
+    if (widget.isStandby) {
+      await _turnOn();
+    } else {
+      await _turnOff();
+    }
+  }
+
+  Future<void> _turnOff() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -52,15 +62,60 @@ class _SystemOffButtonState extends State<SystemOffButton> {
     );
 
     if (confirmed != true || !mounted) return;
+    // Persist standby state immediately — before API call completes
+    await SensorPollingService.instance.setStandby(true);
+    await _doRequest('/system-off', 'System entering standby — all controls OFF');
+  }
 
+  Future<void> _turnOn() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.play_circle_outline, color: Colors.green.shade400, size: 24),
+            const SizedBox(width: 10),
+            const Text('Turn On System'),
+          ],
+        ),
+        content: const Text(
+          'This will trigger a produce scan to re-initialize the system '
+          'and resume environmental controls.\n\n'
+          'Are you sure you want to start the system?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.green.shade400),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Turn On'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    // Clear standby state immediately — before API call completes
+    await SensorPollingService.instance.setStandby(false);
+    await _doRequest('/trigger-produce-scan', 'System starting — produce scan triggered');
+  }
+
+  Future<void> _doRequest(String endpoint, String successMsg) async {
     setState(() => _loading = true);
     try {
-      await _client.post('/system-off', {});
+      await _client.post(endpoint, {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('System standby command sent'),
-            backgroundColor: Colors.orange.shade700,
+            content: Text(successMsg),
+            backgroundColor: widget.isStandby
+                ? Colors.green.shade700   // turning ON
+                : Colors.orange.shade700, // turning OFF
           ),
         );
       }
@@ -78,7 +133,12 @@ class _SystemOffButtonState extends State<SystemOffButton> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dangerColor = Colors.red.shade400;
+
+    final isOn      = widget.isStandby; // standby = system is OFF, button says "Turn On"
+    final color     = isOn ? Colors.green.shade400 : Colors.red.shade400;
+    final icon      = isOn ? Icons.play_circle_outline : Icons.power_settings_new;
+    final label     = isOn ? 'TURN ON SYSTEM' : 'TURN OFF SYSTEM';
+    final bgAlpha   = isDark ? 0.08 : 0.04;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12.0),
@@ -87,20 +147,20 @@ class _SystemOffButtonState extends State<SystemOffButton> {
         height: 52,
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: dangerColor.withValues(alpha: 0.5), width: 1.5),
-            foregroundColor: dangerColor,
-            backgroundColor: dangerColor.withValues(alpha: isDark ? 0.08 : 0.04),
+            side: BorderSide(color: color.withValues(alpha: 0.5), width: 1.5),
+            foregroundColor: color,
+            backgroundColor: color.withValues(alpha: bgAlpha),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
-          onPressed: _loading ? null : _turnOffSystem,
+          onPressed: _loading ? null : _handleTap,
           icon: _loading
               ? SizedBox(
                   width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: dangerColor),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: color),
                 )
-              : Icon(Icons.power_settings_new, color: dangerColor),
+              : Icon(icon, color: color),
           label: Text(
-            _loading ? 'SENDING...' : 'TURN OFF SYSTEM',
+            _loading ? 'SENDING...' : label,
             style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0),
           ),
         ),
