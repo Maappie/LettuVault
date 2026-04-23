@@ -572,23 +572,29 @@
           const body = document.getElementById("sysconfig-body");
           body.innerHTML = "";
 
-          if (configs.length > 0) {
-            const latest = configs[0];
-            document.getElementById("stat-temp").textContent =
-              latest.temperature.toFixed(1) + "°C";
-            document.getElementById("stat-hum").textContent =
-              latest.humidity.toFixed(1) + "%";
-            document.getElementById("stat-pres").textContent =
-              latest.pressure.toFixed(1) + " hPa";
+          // Find the latest row that actually has values (skip null/standby rows)
+          const latest = configs.find(c => c.temperature !== null && c.humidity !== null && c.pressure !== null);
+          if (latest) {
+            document.getElementById("stat-temp").textContent = latest.temperature.toFixed(1) + "°C";
+            document.getElementById("stat-hum").textContent = latest.humidity.toFixed(1) + "%";
+            document.getElementById("stat-pres").textContent = latest.pressure.toFixed(1) + " hPa";
+          } else {
+            document.getElementById("stat-temp").textContent = "-- (Standby)";
+            document.getElementById("stat-hum").textContent = "-- (Standby)";
+            document.getElementById("stat-pres").textContent = "-- (Standby)";
           }
 
           configs.forEach((cfg) => {
+            const temp = cfg.temperature !== null ? `🌡️ ${cfg.temperature.toFixed(2)}°C` : `⏹️ Standby`;
+            const hum  = cfg.humidity    !== null ? `💧 ${cfg.humidity.toFixed(2)}%`    : `⏹️ Standby`;
+            const pres = cfg.pressure    !== null ? `📊 ${cfg.pressure.toFixed(2)} hPa` : `⏹️ Standby`;
+            const isStandby = cfg.temperature === null && cfg.humidity === null && cfg.pressure === null;
             const tr = document.createElement("tr");
             tr.innerHTML = `
                         <td class="timestamp">${new Date(cfg.timestamp).toLocaleString()}</td>
-                        <td><span class="pill-temp">🌡️ ${cfg.temperature.toFixed(2)}°C</span></td>
-                        <td><span class="pill-hum">💧 ${cfg.humidity.toFixed(2)}%</span></td>
-                        <td><span class="pill-pres">📊 ${cfg.pressure.toFixed(2)} hPa</span></td>
+                        <td><span class="pill-temp" style="${isStandby ? 'background:rgba(248,113,113,0.1);color:#f87171;' : ''}">${temp}</span></td>
+                        <td><span class="pill-hum"  style="${isStandby ? 'background:rgba(248,113,113,0.1);color:#f87171;' : ''}">${hum}</span></td>
+                        <td><span class="pill-pres" style="${isStandby ? 'background:rgba(248,113,113,0.1);color:#f87171;' : ''}">${pres}</span></td>
                     `;
             body.appendChild(tr);
           });
