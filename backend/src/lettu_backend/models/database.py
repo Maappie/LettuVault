@@ -43,9 +43,9 @@ class SystemConfig(Base):
     __tablename__ = "system_config"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=manila_now)
-    temperature = Column(Float)
-    humidity = Column(Float)
-    pressure = Column(Float)
+    temperature = Column(Float, nullable=True)
+    humidity = Column(Float, nullable=True)
+    pressure = Column(Float, nullable=True)
     user_email = Column(String, nullable=True)  # Cloud-registered user email
 
 class InternalEnvironmentReading(Base):
