@@ -285,8 +285,9 @@ class MainNavigatorState extends State<MainNavigator> {
         tempDanger: calcDanger(s.temp, s.targetTemp, kTempTolerance, kTempMaxDeviation),
         humDanger:  calcDanger(s.hum,  s.targetHum,  kHumTolerance,  kHumMaxDeviation),
         presDanger: calcDanger(s.pres, s.targetPres, kPresTolerance, kPresMaxDeviation),
-        apiError:   s.apiError,
-        apiPolling: true,
+        apiError:      s.apiError,
+        apiPolling:    true,
+        systemStandby: s.systemStandby,
       ),
       SensorDetailScreen(
         key: const ValueKey('temp_screen'),

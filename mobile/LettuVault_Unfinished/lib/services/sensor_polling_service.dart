@@ -20,6 +20,7 @@ class SensorState {
   final List<SensorReading> tempHistory, humHistory, presHistory;
   final List<SensorReading> tempBuffer, humBuffer, presBuffer;
   final String? apiError;
+  final bool systemStandby;
 
   const SensorState({
     this.temp = 25.0,
@@ -44,6 +45,7 @@ class SensorState {
     this.humBuffer = const [],
     this.presBuffer = const [],
     this.apiError,
+    this.systemStandby = false,
   });
 
   SensorState copyWith({
@@ -70,6 +72,7 @@ class SensorState {
     List<SensorReading>? presBuffer,
     String? apiError,
     bool clearError = false,
+    bool? systemStandby,
   }) {
     return SensorState(
       temp: temp ?? this.temp,
@@ -94,6 +97,7 @@ class SensorState {
       humBuffer: humBuffer ?? this.humBuffer,
       presBuffer: presBuffer ?? this.presBuffer,
       apiError: clearError ? null : (apiError ?? this.apiError),
+      systemStandby: systemStandby ?? this.systemStandby,
     );
   }
 }
@@ -155,18 +159,28 @@ class SensorPollingService extends ChangeNotifier {
       final config  = await _configRepo.getLatest();
 
       if (config != null) {
-        final tT = config.temperature ?? _state.targetTemp;
-        final tH = config.humidity    ?? _state.targetHum;
-        final tP = config.pressure    ?? _state.targetPres;
-        _state = _state.copyWith(
-          targetTemp: tT, targetHum: tH, targetPres: tP,
-          tempThresholdLow:  _useDefaultThresholds ? tT - kTempMaxDeviation  : null,
-          tempThresholdHigh: _useDefaultThresholds ? tT + kTempMaxDeviation  : null,
-          humThresholdLow:   _useDefaultThresholds ? tH - kHumMaxDeviation   : null,
-          humThresholdHigh:  _useDefaultThresholds ? tH + kHumMaxDeviation   : null,
-          presThresholdLow:  _useDefaultThresholds ? tP - kPresMaxDeviation  : null,
-          presThresholdHigh: _useDefaultThresholds ? tP + kPresMaxDeviation  : null,
-        );
+        // Detect standby: latest config row has all-null values (system turned off)
+        final isStandby = config.temperature == null &&
+            config.humidity == null &&
+            config.pressure == null;
+
+        if (isStandby) {
+          _state = _state.copyWith(systemStandby: true);
+        } else {
+          final tT = config.temperature ?? _state.targetTemp;
+          final tH = config.humidity    ?? _state.targetHum;
+          final tP = config.pressure    ?? _state.targetPres;
+          _state = _state.copyWith(
+            systemStandby: false,
+            targetTemp: tT, targetHum: tH, targetPres: tP,
+            tempThresholdLow:  _useDefaultThresholds ? tT - kTempMaxDeviation  : null,
+            tempThresholdHigh: _useDefaultThresholds ? tT + kTempMaxDeviation  : null,
+            humThresholdLow:   _useDefaultThresholds ? tH - kHumMaxDeviation   : null,
+            humThresholdHigh:  _useDefaultThresholds ? tH + kHumMaxDeviation   : null,
+            presThresholdLow:  _useDefaultThresholds ? tP - kPresMaxDeviation  : null,
+            presThresholdHigh: _useDefaultThresholds ? tP + kPresMaxDeviation  : null,
+          );
+        }
       }
 
       if (reading != null) {

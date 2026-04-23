@@ -21,6 +21,7 @@ class DashboardScreen extends StatelessWidget {
   final double tempDanger, humDanger, presDanger;
   final String? apiError;
   final bool apiPolling;
+  final bool systemStandby;
 
   const DashboardScreen({
     super.key,
@@ -38,6 +39,7 @@ class DashboardScreen extends StatelessWidget {
     this.presDanger = 0.0,
     this.apiError,
     this.apiPolling = false,
+    this.systemStandby = false,
   });
 
   @override
@@ -52,21 +54,21 @@ class DashboardScreen extends StatelessWidget {
               ApiStatusBanner(apiError: apiError, isPolling: apiPolling),
               SectionHeader('ENVIRONMENTAL DATA'),
               SensorSummaryCard(
-                valueLabel: 'Temperature: ${t.toStringAsFixed(1)}°C',
-                targetLabel: 'Target: ${targetT.toStringAsFixed(1)}°C',
-                dangerLevel: tempDanger,
+                valueLabel:  'Temperature: ${t.toStringAsFixed(1)}°C',
+                targetLabel: systemStandby ? 'Target: System OFF' : 'Target: ${targetT.toStringAsFixed(1)}°C',
+                dangerLevel: systemStandby ? 0.0 : tempDanger,
                 trend: trendT,
               ),
               SensorSummaryCard(
-                valueLabel: 'Humidity: ${h.toStringAsFixed(0)}%',
-                targetLabel: 'Target: ${targetH.toStringAsFixed(0)}%',
-                dangerLevel: humDanger,
+                valueLabel:  'Humidity: ${h.toStringAsFixed(0)}%',
+                targetLabel: systemStandby ? 'Target: System OFF' : 'Target: ${targetH.toStringAsFixed(0)}%',
+                dangerLevel: systemStandby ? 0.0 : humDanger,
                 trend: trendH,
               ),
               SensorSummaryCard(
-                valueLabel: 'Pressure: ${p.toStringAsFixed(1)} hPa',
-                targetLabel: 'Target: ${targetP.toStringAsFixed(1)} hPa',
-                dangerLevel: presDanger,
+                valueLabel:  'Pressure: ${p.toStringAsFixed(1)} hPa',
+                targetLabel: systemStandby ? 'Target: System OFF' : 'Target: ${targetP.toStringAsFixed(1)} hPa',
+                dangerLevel: systemStandby ? 0.0 : presDanger,
                 trend: trendP,
               ),
               SectionHeader('SCANS & ACTIONS'),

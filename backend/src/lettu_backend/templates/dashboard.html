@@ -572,16 +572,20 @@
           const body = document.getElementById("sysconfig-body");
           body.innerHTML = "";
 
-          // Find the latest row that actually has values (skip null/standby rows)
-          const latest = configs.find(c => c.temperature !== null && c.humidity !== null && c.pressure !== null);
-          if (latest) {
+          // Use the absolute latest row — if null, system is in standby
+          const latest = configs.length > 0 ? configs[0] : null;
+          const isSystemOff = !latest || (latest.temperature === null && latest.humidity === null && latest.pressure === null);
+          if (!isSystemOff) {
             document.getElementById("stat-temp").textContent = latest.temperature.toFixed(1) + "°C";
-            document.getElementById("stat-hum").textContent = latest.humidity.toFixed(1) + "%";
-            document.getElementById("stat-pres").textContent = latest.pressure.toFixed(1) + " hPa";
+            document.getElementById("stat-hum").textContent  = latest.humidity.toFixed(1)    + "%";
+            document.getElementById("stat-pres").textContent = latest.pressure.toFixed(1)    + " hPa";
           } else {
-            document.getElementById("stat-temp").textContent = "-- (Standby)";
-            document.getElementById("stat-hum").textContent = "-- (Standby)";
-            document.getElementById("stat-pres").textContent = "-- (Standby)";
+            document.getElementById("stat-temp").textContent = "⏹ STANDBY";
+            document.getElementById("stat-hum").textContent  = "⏹ STANDBY";
+            document.getElementById("stat-pres").textContent = "⏹ STANDBY";
+            document.getElementById("stat-temp").style.color = "#f87171";
+            document.getElementById("stat-hum").style.color  = "#f87171";
+            document.getElementById("stat-pres").style.color = "#f87171";
           }
 
           configs.forEach((cfg) => {
