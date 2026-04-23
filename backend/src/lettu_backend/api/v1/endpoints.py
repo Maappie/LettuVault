@@ -144,9 +144,11 @@ def create_system_config(config_in: SystemConfigCreateSchema, db: Session = Depe
             )
         esp32_status = "ESP32 received"
     else:
-        # Bypass ACK — save directly (no ESP32 connected)
+        # Bypass ACK — just publish directly
+        from lettu_backend.services.mqtt import mqtt_service
+        import json
+        mqtt_service.client.publish("lettuvault/control", json.dumps(payload))
         esp32_status = "Saved (ACK bypassed — no hardware)"
-        
     db_result = repo.create_system_config(config_in.model_dump())
     
     # Construct response dictionary
