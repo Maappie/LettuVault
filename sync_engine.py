@@ -178,21 +178,27 @@ def _encode_image_b64(image_path: str) -> str:
     if image_path.startswith("http"):
         return image_path
     
-    # Try looking relative to the lettuvault repository root
-    # Local path from DB is like 'captures/scan_xxx.jpg', but actual disk path is inside 'data/'
-    full_path = Path(__file__).parent / "data" / image_path
-    
-    if not full_path.exists():
-        # Fallback just in case some paths actually start with data/
-        full_path = Path(__file__).parent / image_path
+    root = Path(__file__).parent
 
-    if full_path.exists():
-        try:
-            with open(full_path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("utf-8")
-                return f"b64:{encoded}"
-        except Exception as e:
-            logger.warning(f"⚠️ Could not encode image {full_path}: {e}")
+    # ai_handler saves images to data/captures/<filename>
+    # The DB stores just the filename (e.g. "scan_xxx.jpg")
+    candidates = [
+        root / "data" / "captures" / image_path,   # primary: data/captures/scan_xxx.jpg
+        root / "data" / image_path,                 # fallback: data/scan_xxx.jpg
+        root / image_path,                          # last resort: scan_xxx.jpg
+    ]
+
+    for full_path in candidates:
+        if full_path.exists():
+            try:
+                with open(full_path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("utf-8")
+                    return f"b64:{encoded}"
+            except Exception as e:
+                logger.warning(f"⚠️ Could not encode image {full_path}: {e}")
+                break
+
+    logger.warning(f"⚠️ Image file not found for: {image_path}")
     # Return original string if processing failed or file vanished
     return image_path
 
