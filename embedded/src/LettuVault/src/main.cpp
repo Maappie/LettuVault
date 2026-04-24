@@ -19,7 +19,7 @@
 // --- DEFAULT FALLBACKS (Used if NVS is empty) ---
 #define DEFAULT_WIFI_SSID       "Mappie"
 #define DEFAULT_WIFI_PASSWORD   "Aa1231325213!"
-#define DEFAULT_MQTT_SERVER     "192.168.137.1"  // Laptop hotspot IP
+#define DEFAULT_MQTT_SERVER     "192.1192.168.137.1"  // Laptop/PI hotspot IP
 #define DEFAULT_MQTT_PORT       1883
 #define DEVICE_ID               "ESP32-LettuVault-01"
 #define API_KEY                 "lettuce-master-key-2024" 
@@ -254,10 +254,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     if (!error) {
         bool changed = false;
+        Serial.println("[DEBUG] JSON parsed successfully");
         
-        if (!doc["tx_id"].isNull()) {
+        if (doc.containsKey("tx_id")) {
             pendingAckId = doc["tx_id"].as<String>();
             sendAckPending = true; 
+            Serial.printf("  -> Transaction ID: %s\n", pendingAckId.c_str());
         }
 
         // --- SYSTEM OFF COMMAND: all values are 0 → enter standby ---
@@ -283,8 +285,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
             forceDisplayUpdate = true;
             changed = true;
         } else {
-            if (!doc["temperature"].isNull()) {
+            if (doc.containsKey("temperature")) {
                 float new_temp = doc["temperature"].as<float>();
+                Serial.printf("  -> Found temp: %.1f\n", new_temp);
                 if (set_temperature != new_temp) {
                     lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS; 
                     Serial.printf("[HVAC] Target temp changed to %.1f. Lockout bypassed.\n", new_temp);
@@ -293,13 +296,25 @@ void callback(char* topic, byte* payload, unsigned int length) {
                 preferences.putFloat("set_temp", set_temperature);
                 changed = true;
             }
-            if (!doc["humidity"].isNull()) {
-                set_humidity = doc["humidity"].as<float>();
+            if (doc.containsKey("humidity")) {
+                float new_hum = doc["humidity"].as<float>();
+                Serial.printf("  -> Found hum: %.1f\n", new_hum);
+                if (set_humidity != new_hum) {
+                    lastHumidifierOffTime = millis() - RELAY_LOCKOUT_MS;
+                    Serial.printf("[HVAC] Target hum changed to %.1f. Lockout bypassed.\n", new_hum);
+                }
+                set_humidity = new_hum;
                 preferences.putFloat("set_hum", set_humidity);
                 changed = true;
             }
-            if (!doc["pressure"].isNull()) {
-                set_pressure = doc["pressure"].as<float>();
+            if (doc.containsKey("pressure")) {
+                float new_pres = doc["pressure"].as<float>();
+                Serial.printf("  -> Found pres: %.1f\n", new_pres);
+                if (set_pressure != new_pres) {
+                    lastVacuumOffTime = millis() - RELAY_LOCKOUT_MS;
+                    Serial.printf("[HVAC] Target pres changed to %.1f. Lockout bypassed.\n", new_pres);
+                }
+                set_pressure = new_pres;
                 preferences.putFloat("set_pres", set_pressure);
                 changed = true;
             }
@@ -324,67 +339,62 @@ void callback(char* topic, byte* payload, unsigned int length) {
  * CORE 0: NETWORK TASK 
  */
 void networkTask(void * parameter) {
+    unsigned long lastWifiRetry = 0;
+    unsigned long lastMqttRetry = 0;
+    const unsigned long WIFI_RETRY_INTERVAL = 10000;
+    const unsigned long MQTT_RETRY_INTERVAL = 5000;
+
     for(;;) { 
-        if (WiFi.status() != WL_CONNECTED) {
-            wifiState = false;
-            mqttState = false;
-            
-            Serial.printf("\n[NETWORK] Attempting WIFI -> SSID: '%s' | PASS: '%s'\n", wifi_ssid.c_str(), wifi_password.c_str());
-            
-            WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-            
-            int attempts = 0;
-            while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-                vTaskDelay(500 / portTICK_PERIOD_MS);
-                Serial.print(".");
-                attempts++;
-            }
-            
-            if (WiFi.status() == WL_CONNECTED) {
+        wl_status_t status = WiFi.status();
+        unsigned long now = millis();
+
+        if (status == WL_CONNECTED) {
+            if (!wifiState) {
                 Serial.printf("\n[NETWORK] WiFi Connected! IP: %s\n", WiFi.localIP().toString().c_str());
                 wifiState = true; 
+            }
+
+            if (!client.connected()) {
+                mqttState = false; 
+                if (now - lastMqttRetry > MQTT_RETRY_INTERVAL) {
+                    lastMqttRetry = now;
+                    Serial.printf("[NETWORK] Attempting MQTT connection to: %s:%d\n", mqtt_server_host.c_str(), mqtt_server_port);
+                    
+                    if (xSemaphoreTake(mqttMutex, (TickType_t)10)) {
+                        disableCore0WDT(); 
+                        bool isConnected = client.connect(DEVICE_ID);
+                        enableCore0WDT();
+                        
+                        if (isConnected) {
+                            bool subOk = client.subscribe(topic_control);
+                            Serial.printf("[NETWORK] MQTT Connected & Subscription to %s: %s\n", 
+                                          topic_control, subOk ? "SUCCESS" : "FAILED");
+                            mqttState = true; 
+                        } else {
+                            Serial.printf("[NETWORK] MQTT Failed, rc=%d. Retrying in %lus...\n", client.state(), MQTT_RETRY_INTERVAL / 1000);
+                        }
+                        xSemaphoreGive(mqttMutex); 
+                    }
+                }
             } else {
-                Serial.println("\n[NETWORK] WiFi Connection Failed. Retrying in 5s...");
-                vTaskDelay(5000 / portTICK_PERIOD_MS); 
-                continue; 
+                mqttState = true;
+                if (xSemaphoreTake(mqttMutex, (TickType_t)20)) {
+                    client.loop();
+                    xSemaphoreGive(mqttMutex);
+                }
             }
         } else {
-            wifiState = true;
-        }
+            wifiState = false;
+            mqttState = false;
 
-        if (WiFi.status() == WL_CONNECTED && !client.connected()) {
-            mqttState = false; 
-            Serial.printf("[NETWORK] Attempting MQTT connection to: %s:%d\n", mqtt_server_host.c_str(), mqtt_server_port);
-            if (xSemaphoreTake(mqttMutex, portMAX_DELAY)) {
-                // The PubSubClient connection routine can block up to 15 seconds waiting 
-                // for the broker, which triggers the Core 0 Watchdog. We temporarily disable it.
-                disableCore0WDT(); 
-                bool isConnected = client.connect(DEVICE_ID);
-                enableCore0WDT();
-                
-                if (isConnected) {
-                    client.subscribe(topic_control);
-                    Serial.println("[NETWORK] MQTT Connected!");
-                    mqttState = true; 
-                } else {
-                    Serial.printf("[NETWORK] MQTT Failed, rc=%d. Retrying...\n", client.state());
-                }
-                xSemaphoreGive(mqttMutex); 
-            }
-            if (!client.connected()) {
-                vTaskDelay(5000 / portTICK_PERIOD_MS); 
-            }
-        } else if (client.connected()) {
-            mqttState = true;
-        }
-
-        if (client.connected()) {
-            if (xSemaphoreTake(mqttMutex, (TickType_t)10)) {
-                client.loop();
-                xSemaphoreGive(mqttMutex);
+            if (now - lastWifiRetry > WIFI_RETRY_INTERVAL) {
+                lastWifiRetry = now;
+                Serial.printf("\n[NETWORK] Attempting WIFI -> SSID: '%s' | PASS: '%s'\n", wifi_ssid.c_str(), wifi_password.c_str());
+                WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS); 
+        
+        vTaskDelay(50 / portTICK_PERIOD_MS); 
     }
 }
 
@@ -393,6 +403,19 @@ void networkTask(void * parameter) {
  */
 void setup() {
     Serial.begin(115200);
+    
+    // --- TEMPORARY WIFI SCAN DEBUG ---
+    Serial.println("[DEBUG] Scanning for WiFi networks...");
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    delay(100);
+    int n = WiFi.scanNetworks();
+    Serial.println("[DEBUG] Scan done");
+    for (int i = 0; i < n; i++) {
+        Serial.printf("  - %s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+    }
+    Serial.println("--------------------------------");
+
     mqttMutex = xSemaphoreCreateMutex();
 
     preferences.begin("lettuvault", false);
@@ -512,9 +535,18 @@ void loop() {
             if (key == 'A') {
                 float val = inputBuffer.toFloat();
                 bool changed = false;
-                if (subPageMode == 0) { set_temperature = val; preferences.putFloat("set_temp", val); changed = true; }
-                else if (subPageMode == 1) { set_humidity = val; preferences.putFloat("set_hum", val); changed = true; }
-                else if (subPageMode == 2) { set_pressure = val; preferences.putFloat("set_pres", val); changed = true; }
+                if (subPageMode == 0) { 
+                    if (set_temperature != val) lastCompressorOffTime = millis() - RELAY_LOCKOUT_MS;
+                    set_temperature = val; preferences.putFloat("set_temp", val); changed = true; 
+                }
+                else if (subPageMode == 1) { 
+                    if (set_humidity != val) lastHumidifierOffTime = millis() - RELAY_LOCKOUT_MS;
+                    set_humidity = val; preferences.putFloat("set_hum", val); changed = true; 
+                }
+                else if (subPageMode == 2) { 
+                    if (set_pressure != val) lastVacuumOffTime = millis() - RELAY_LOCKOUT_MS;
+                    set_pressure = val; preferences.putFloat("set_pres", val); changed = true; 
+                }
                 
                 if (changed && wifiState && mqttState) {
                     JsonDocument syncDoc;

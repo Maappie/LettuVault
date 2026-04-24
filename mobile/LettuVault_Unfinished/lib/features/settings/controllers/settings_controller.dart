@@ -208,6 +208,11 @@ class SettingsController extends ChangeNotifier {
       );
       _isSavingSysConfig = false;
       notifyListeners();
+      
+      // Successfully pushing a new config automatically wakes the system up.
+      // Update the polling service to reflect this immediately and lock the state.
+      await SensorPollingService.instance.setStandby(false);
+      
       return true;
     } catch (e) {
       _isSavingSysConfig = false;

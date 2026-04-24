@@ -58,6 +58,20 @@ if not connect_mqtt():
     print("[AI] Could not connect to MQTT Broker. Is it running?")
 
 # =====================================================
+#  Status Reporting
+# =====================================================
+def send_status_to_backend(message: str):
+    """Publishes a plain text status message to the status topic."""
+    try:
+        payload = {
+            "api_key": settings.X_API_KEY,
+            "status": message
+        }
+        mqtt_client.publish("lettuvault/status", json.dumps(payload))
+    except Exception as e:
+        print(f"⚠️ [AI] Could not send status: {e}")
+
+# =====================================================
 #  Send Detection Results
 # =====================================================
 # =====================================================
@@ -136,6 +150,7 @@ def _open_camera():
                     
                     # Log the success clearly
                     print(f"✅ [AI] LOCKED onto camera at index {idx}!")
+                    send_status_to_backend(f"✅ AI locked onto camera at index {idx}")
                     if idx != ai_cfg.CAMERA_INDEX:
                         print(f"💡 [AI] Note: Configured index {ai_cfg.CAMERA_INDEX} failed or was skipped. Found working camera at {idx}.")
                     return cap
@@ -144,9 +159,11 @@ def _open_camera():
 
         if attempt < CAMERA_MAX_RETRIES:
             print(f"⚠️ [AI] Could not find ANY working camera (Attempt {attempt}/{CAMERA_MAX_RETRIES}). Retrying in {CAMERA_RETRY_INTERVAL}s...")
+            send_status_to_backend(f"⚠️ AI camera probe failed (Attempt {attempt}/{CAMERA_MAX_RETRIES}). Retrying...")
             time.sleep(CAMERA_RETRY_INTERVAL)
         else:
             print(f"❌ [AI] Failed to find a camera after {CAMERA_MAX_RETRIES} attempts. Giving up.")
+            send_status_to_backend(f"❌ AI failed to find any working camera after {CAMERA_MAX_RETRIES} attempts.")
             
     return None
 

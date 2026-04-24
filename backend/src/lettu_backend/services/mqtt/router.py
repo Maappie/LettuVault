@@ -51,5 +51,8 @@ def dispatch(topic: str, raw_payload: bytes, is_subscriber: bool):
         process_sensor_data(data)
     elif topic == "lettuvault/config/sync":
         process_config_update(data)
+    elif topic == "lettuvault/status":
+        status_msg = data.get("status", "No status message")
+        logger.info(f"💡 [SYSTEM] {status_msg}")
     else:
         logger.warning(f"⚠️ [ROUTER] Unmapped topic received: {topic}")
