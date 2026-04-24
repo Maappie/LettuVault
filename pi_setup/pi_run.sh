@@ -66,7 +66,7 @@ PID_MQTT=$!
 
 # 3. Start AI Detection (Predictor)
 echo "👁️  Starting AI Detection engine..."
-$PYTHON -m lettu_vault_ai.predict > data/ai_predict.log 2>&1 &
+$PYTHON -m lettu_vault_ai.predict &
 PID_AI=$!
 
 # 4. Start Cloud Sync Engine
